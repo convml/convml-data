@@ -1,14 +1,11 @@
-name: convml_tt
+name: convml_data
 
 channels:
-  - pytorch
   - defaults
   - conda-forge
 dependencies:
   - pip
-  - python=3.7
   - netcdf4
-  - cpuonly
   - git
   - xarray
   - cartopy

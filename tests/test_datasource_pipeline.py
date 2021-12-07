@@ -2,8 +2,8 @@ import tempfile
 
 import luigi
 
-from convml_tt.data.sources.examples import ExampleDatasource, fetch_example_datasource
-from convml_tt.data.sources.pipeline import GenerateTiles, GenerateRegriddedScenes
+from convml_data.examples import ExampleDatasource, fetch_example_datasource
+from convml_data.pipeline import GenerateTiles, GenerateRegriddedScenes
 
 
 def test_make_triplets():
