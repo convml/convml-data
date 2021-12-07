@@ -1,5 +1,5 @@
 from pathlib import Path
-from ...pipeline import XArrayTarget, DBTarget
+from .utils.luigi import XArrayTarget, DBTarget
 from . import DataSource
 
 import xarray as xr

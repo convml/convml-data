@@ -4,7 +4,7 @@ import luigi
 import matplotlib.pyplot as plt
 import regridcart as rc
 
-from ....pipeline import ImageTarget, XArrayTarget
+from ..utils.luigi import ImageTarget, XArrayTarget
 from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..utils.domain_images import align_axis_x, rgb_image_from_scene_data

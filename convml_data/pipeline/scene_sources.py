@@ -8,7 +8,7 @@ from functools import partial
 from ..goes16.pipeline import GOES16Query
 from ..les import FindLESFiles
 from .. import DataSource
-from ....pipeline import DBTarget
+from ..utils.luigi import DBTarget
 from collections import OrderedDict
 
 log = logging.getLogger()

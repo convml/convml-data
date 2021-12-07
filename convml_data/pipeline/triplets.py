@@ -4,8 +4,7 @@ import luigi
 import numpy as np
 import regridcart as rc
 
-from ....pipeline import XArrayTarget, DBTarget
-from ...common import TILE_IDENTIFIER_FORMAT
+from ..utils.luigi import XArrayTarget, DBTarget
 from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..sampling import triplets as triplet_sampling
@@ -13,6 +12,10 @@ from ..utils.domain_images import rgb_image_from_scene_data
 from . import GenerateSceneIDs
 from .sampling import (CropSceneSourceFiles, SceneSourceFiles,
                        _SceneRectSampleBase)
+
+
+# duplicated from `convml_tt`, do not change this
+TILE_IDENTIFIER_FORMAT = "{triplet_id:05d}_{tile_type}"
 
 
 class TripletSceneSplits(luigi.Task):

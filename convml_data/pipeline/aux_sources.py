@@ -4,7 +4,7 @@ import luigi
 import numpy as np
 import datetime
 
-from ....pipeline import DBTarget
+from ..utils.luigi import DBTarget
 from .. import DataSource
 from ..goes16.pipeline import GOES16Query
 from .scene_sources import GenerateSceneIDs, get_time_for_filename, parse_scene_id

@@ -7,7 +7,7 @@ import luigi
 import numpy as np
 import regridcart as rc
 
-from ....pipeline import ImageTarget, XArrayTarget
+from ..utils.luigi import ImageTarget, XArrayTarget
 from .. import DataSource, goes16
 from ..les import LESDataFile
 from .aux_sources import CheckForAuxiliaryFiles

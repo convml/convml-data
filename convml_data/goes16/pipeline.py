@@ -7,7 +7,7 @@ import xarray as xr
 import numpy as np
 import isodate
 
-from ....pipeline import YAMLTarget, XArrayTarget
+from ..utils.luigi import YAMLTarget, XArrayTarget
 
 
 class DatetimeListParameter(luigi.Parameter):
