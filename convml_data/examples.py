@@ -4,7 +4,7 @@ Example datasources for use with the triplet-trainer
 import enum
 from pathlib import Path
 
-from torchvision.datasets.utils import download_and_extract_archive
+from .utils.download import download_and_extract_archive
 
 _URL_ROOT = "http://homepages.see.leeds.ac.uk/~earlcd/ml-datasources"
 
