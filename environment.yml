@@ -1,0 +1,12 @@
+name: convml_data
+
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - pip
+  - netcdf4
+  - git
+  - xarray
+  - cartopy
+  - xesmf
