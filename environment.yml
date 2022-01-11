@@ -10,4 +10,4 @@ dependencies:
   #- git
   #- xarray
   #- cartopy
-  #- xesmf
+  - xesmf
