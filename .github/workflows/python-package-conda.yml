@@ -32,8 +32,9 @@ jobs:
           mamba env update --file environment.yml --name base
       - name: install convml_data
         run: |
-          pip install .
-          pip install ".[sattiles]"
+          python -m pip install .
+          python -m pip install ".[sattiles]"
+          python -m pip install ".[dev]"
 # 2021/2/24: skip linting for now
 #      - name: Lint with flake8
 #        run: |
@@ -44,5 +45,4 @@ jobs:
 #          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Test with pytest
         run: |
-          conda install pytest
-          pytest
+          python -m pytest
