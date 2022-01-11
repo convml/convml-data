@@ -5,9 +5,9 @@ channels:
   - conda-forge
 dependencies:
   - pip
-  - esmpy
-  - netcdf4
-  - git
-  - xarray
-  - cartopy
-  - xesmf
+  #- esmpy
+  #- netcdf4
+  #- git
+  #- xarray
+  #- cartopy
+  #- xesmf
