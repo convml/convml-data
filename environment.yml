@@ -5,6 +5,7 @@ channels:
   - conda-forge
 dependencies:
   - pip
+  - esmpy
   - netcdf4
   - git
   - xarray
