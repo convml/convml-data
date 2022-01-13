@@ -163,3 +163,52 @@ class SourceDataDomain:
             )
         else:
             raise NotImplementedError(ds.coords)
+
+
+class TrajectoriesSpanningDomain(rc.LocalCartesianDomain):
+    def __init__(self, ds_trajectories, padding=1.2):
+        self.ds = ds_trajectories
+        da_lon = self.ds.lon
+        da_lat = self.ds.lat
+
+        # use median values as origin for domain
+        # TODO: make a better choice
+        lon_origin = da_lon.median().item()
+        lat_origin = da_lat.median().item()
+
+        # create a domain with no span but positioned at the correct point
+        # so that ew can calculate the maximum zonal and meridional span
+        # from the lat/lon of the corners
+        dummy_domain = rc.LocalCartesianDomain(
+            central_latitude=lat_origin,
+            central_longitude=lon_origin,
+            l_zonal=0.0,
+            l_meridional=0.0,
+        )
+
+        # find xy-position of all lat/lon positions in trajectories
+        xy_pts = dummy_domain.crs.transform_points(
+            x=da_lon,
+            y=da_lat,
+            z=np.zeros_like(da_lon.data),
+            src_crs=ccrs.PlateCarree(),
+        )
+
+        x_pts = xy_pts[..., 0]
+        y_pts = xy_pts[..., 1]
+
+        l_zonal = padding * 2.0 * max([abs(x_pts.min()), x_pts.max()])
+        l_meridional = padding * 2.0 * max([abs(y_pts.min()), y_pts.max()])
+
+        super().__init__(
+            central_latitude=lat_origin,
+            central_longitude=lon_origin,
+            l_zonal=l_zonal,
+            l_meridional=l_meridional,
+        )
+
+    def plot_trajectories(self, ax=None):
+        if ax is None:
+            ax = self.plot_outline()
+
+        ax.plot(self.ds.lon, self.ds.lat, transform=ccrs.PlateCarree())

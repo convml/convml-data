@@ -8,9 +8,10 @@ import dateutil.parser
 import datetime
 import numpy as np
 import functools
+import xarray as xr
 from regridcart import LocalCartesianDomain
 
-from .sampling.domain import SourceDataDomain
+from .sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
 from .utils import time_filters
 
 
@@ -21,20 +22,38 @@ def _parse_datetime(o):
         return o
 
 
+def _npdt64_to_dt(v):
+    return v.astype("datetime64[s]").astype(datetime.datetime)
+
+
+def _load_trajectories(datasource_meta):
+    fn_trajectories = datasource_meta.get("trajectories", {}).get("filepath")
+    if fn_trajectories is None:
+        raise Exception(
+            "Please set the trajectories filepath by defining the value of"
+            " `filepath` within `trajectories` in the root of meta.yaml"
+        )
+    ds_trajectories = xr.open_dataset(fn_trajectories)
+    return ds_trajectories
+
+
 def _parse_time_intervals(time_meta):
     if "intervals" in time_meta:
         for time_interval_meta in time_meta["intervals"]:
             for time_interval in _parse_time_intervals(time_meta=time_interval_meta):
                 yield time_interval
     else:
-        t_start = _parse_datetime(time_meta["t_start"])
-        if "N_days" in time_meta:
-            duration = datetime.timedelta(days=time_meta["N_days"])
-            t_end = t_start + duration
-        elif "t_end" in time_meta:
-            t_end = _parse_datetime(time_meta["t_end"])
+        if "t_start" in time_meta:
+            t_start = _parse_datetime(time_meta["t_start"])
+            if "N_days" in time_meta:
+                duration = datetime.timedelta(days=time_meta["N_days"])
+                t_end = t_start + duration
+            elif "t_end" in time_meta:
+                t_end = _parse_datetime(time_meta["t_end"])
+            else:
+                raise NotImplementedError(time_meta)
         else:
-            raise NotImplementedError(time_meta["time"])
+            raise NotImplementedError(time_meta)
 
         yield (t_start, t_end)
 
@@ -64,6 +83,15 @@ class DataSource:
             domain = LocalCartesianDomain(**kwargs)
         elif domain_meta.get("kind") == "as_source":
             domain = SourceDataDomain()
+        elif domain_meta.get("kind") == "spanning_trajectories":
+            ds_trajectories = _load_trajectories(datasource_meta=self._meta)
+            kwargs = {}
+            if 'padding' in domain_meta:
+                kwargs['padding'] = domain_meta['padding']
+            domain = TrajectoriesSpanningDomain(
+                ds_trajectories=ds_trajectories,
+                **kwargs
+            )
         else:
             raise NotImplementedError(domain_meta)
 
@@ -73,7 +101,7 @@ class DataSource:
         sampling_meta = self._meta.get("sampling", {})
 
         if "triplets" in sampling_meta:
-            if not "resolution" in sampling_meta:
+            if "resolution" not in sampling_meta:
                 raise Exception(
                     "To do triplet sampling you must define the `resolution` "
                     "(in meters/pixel) in the `sampling` section"
@@ -123,6 +151,12 @@ class DataSource:
                     "(N_days) in a `time` section of `meta.yaml`"
                 )
             return
+        elif time_meta.get("source") == "trajectories":
+            ds_trajectories = _load_trajectories(datasource_meta=self._meta)
+            da_time = ds_trajectories.time
+            t_min = _npdt64_to_dt(da_time.min().values)
+            t_max = _npdt64_to_dt(da_time.max().values)
+            self._time_intervals = [(t_min, t_max)]
         else:
             self._time_intervals = list(_parse_time_intervals(time_meta=time_meta))
 

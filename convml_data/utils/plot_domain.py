@@ -6,7 +6,7 @@ import numpy as np
 import luigi
 
 from .. import DataSource
-from ..sampling.domain import SourceDataDomain
+from ..sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
 from ..pipeline.sampling import SceneSourceFiles
 from ..pipeline.scene_sources import GenerateSceneIDs
 
@@ -83,6 +83,9 @@ def plot_domain(dataset, ax, **kwargs):
     ax.margins(10.0)
     # bbox_shape = domain_bbox.get_outline_shape()
     # draw_box(bbox_shape, color="red", face_alpha=0.2, label="tiling bbox")
+
+    if isinstance(domain, TrajectoriesSpanningDomain):
+        domain.plot_trajectories(ax=ax)
 
     # domain_rect = None  # TODO: fix to get the correct variable
     # bbox_shape = domain_rect.get_outline_shape()

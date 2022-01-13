@@ -22,7 +22,7 @@ class GOES16Query(luigi.Task):
     dt_max = luigi.FloatParameter()
     channel = luigi.ListParameter()
     time = luigi.DateMinuteParameter()
-    debug = luigi.BoolParameter(default=False)
+    debug = luigi.BoolParameter(default=True)
     data_path = luigi.Parameter()
     product = luigi.OptionalParameter(default=None)
 
