@@ -210,25 +210,32 @@ class DataSource:
             {k: v for k, v in self._meta.items() if not k.startswith("_")}
         )
 
-    def valid_scene_time(self, scene_time):
+    def filter_scene_times(self, times):
         """
         Apply the time filtering specified for this source dataset if one is specified
         """
         time_meta = self._meta.get("time")
         if time_meta is None:
-            return True
-
-        found_valid_interval = False
-        for t_start, t_end in self.time_intervals:
-            if np.datetime64(t_start) <= scene_time and scene_time <= np.datetime64(
-                t_end
-            ):
-                found_valid_interval = True
-        if not found_valid_interval:
-            return False
+            return times
 
         filters = time_meta.get("filters", {})
+
+        # first we add our own filter which always has to be satisfied: the
+        # values fit within the selected time intervals
+        def _within_time_intervals(t):
+            found_valid_interval = False
+            for t_start, t_end in self.time_intervals:
+                if np.datetime64(t_start) <= t and t <= np.datetime64(t_end):
+                    found_valid_interval = True
+
+            return found_valid_interval
+
+        filter_fns = []
+        filter_fns.append(_within_time_intervals)
+
+        map_scene_times_to_trajectory_times = False
         for filter_kind, filter_value in filters.items():
+            filter_fn = None
             if filter_kind == "N_hours_from_zenith":
                 lon_zenith = self.domain.central_longitude
                 filter_fn = functools.partial(
@@ -240,10 +247,29 @@ class DataSource:
                 filter_fn = functools.partial(
                     time_filters.within_attr_values, **{filter_kind: filter_value}
                 )
+            elif filter_kind == "using_trajectory_sampling" and filter_value is True:
+                map_scene_times_to_trajectory_times = True
             else:
                 raise NotImplementedError(filter_kind)
 
-            if not filter_fn(scene_time):
-                return False
+            if filter_fn is not None:
+                filter_fns.append(filter_fn)
 
-        return True
+        if map_scene_times_to_trajectory_times:
+            ds_trajectories = _load_trajectories(self._meta)
+            da_source_times = ds_trajectories.time
+            da_times = xr.DataArray(times)
+            valid_times = []
+            for t in da_source_times.values:
+                da_delta_t = np.abs(da_times - t)
+                da_t_nearest = da_times.isel(dim_0=da_delta_t.argmin())
+                valid_times.append(_npdt64_to_dt(da_t_nearest.values))
+            times = list(set(valid_times))
+
+        for filter_fn in filter_fns:
+            times = list(filter(filter_fn, times))
+
+        if len(times) == 0:
+            raise Exception("No valid times found")
+
+        return times
