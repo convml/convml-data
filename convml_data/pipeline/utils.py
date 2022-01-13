@@ -1,5 +1,7 @@
-import luigi
 import re
+
+import luigi
+
 from .scene_sources import GenerateSceneIDs, parse_scene_id
 
 
@@ -76,6 +78,7 @@ class GroupedSceneBulkProcessingBaseTask(SceneBulkProcessingBaseTask):
     """
     Groups all scenes in dataset by date and runs them provided Task
     """
+
     scene_group_prefix = "DATE"
 
     def _build_runtime_tasks(self):

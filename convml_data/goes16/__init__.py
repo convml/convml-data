@@ -1,1 +1,1 @@
-from . import satpy_rgb
+from . import satpy_rgb  # noqa

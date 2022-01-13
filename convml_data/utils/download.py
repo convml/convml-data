@@ -5,7 +5,7 @@ commit b50ffef5f85029b1440ac155ca1e6d95c55520aa
 
 BSD 3-Clause License
 
-Copyright (c) Soumith Chintala 2016, 
+Copyright (c) Soumith Chintala 2016,
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -47,21 +47,10 @@ import urllib
 import urllib.error
 import urllib.request
 import zipfile
-from typing import (
-    Any,
-    Callable,
-    List,
-    Iterable,
-    Optional,
-    Dict,
-    IO,
-    Tuple,
-    Iterator,
-)
+from typing import IO, Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from tqdm import tqdm
-
 
 USER_AGENT = "convml/data"
 

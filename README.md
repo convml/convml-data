@@ -33,7 +33,7 @@ sampling:
 ## The `source` and `type` of your dataset
 
 The first step is to define the `source` and `type`, currently `source in
-[goes16, LES]` are supported. 
+[goes16, LES]` are supported.
 
 
 ### `goes16` data source

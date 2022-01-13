@@ -1,10 +1,9 @@
-import xarray as xr
-
 import satpy
-import satpy.composites.viirs
 import satpy.composites.abi
 import satpy.composites.cloud_products
+import satpy.composites.viirs
 import satpy.enhancements
+import xarray as xr
 
 
 def _cleanup_composite_da_attrs(da_composite):
@@ -21,7 +20,7 @@ def _cleanup_composite_da_attrs(da_composite):
             ("prerequisites", lambda v: None),
             ("crs", lambda v: str(v)),
             ("orbital_parameters", lambda v: None),
-            ("_satpy_id", lambda v: None)
+            ("_satpy_id", lambda v: None),
         ]
 
         for v, fn in fns:
@@ -76,7 +75,7 @@ def load_aux_file(scene_fn):
     # but we need to pick out the right variable in the dataset
     ds = xr.open_dataset(scene_fn)
     vars_2d = [
-        name for (name, da) in ds.data_vars.items() if set(da.dims) == {'x', 'y'}
+        name for (name, da) in ds.data_vars.items() if set(da.dims) == {"x", "y"}
     ]
     vars_2d.remove("DQF")
     if len(vars_2d) != 1:

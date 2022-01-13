@@ -1,15 +1,16 @@
-import luigi
-from pathlib import Path
 import datetime
-import logging
 import itertools
+import logging
+from collections import OrderedDict
 from functools import partial
+from pathlib import Path
 
+import luigi
+
+from .. import DataSource
 from ..goes16.pipeline import GOES16Query
 from ..les import FindLESFiles
-from .. import DataSource
 from ..utils.luigi import DBTarget
-from collections import OrderedDict
 
 log = logging.getLogger()
 

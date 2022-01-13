@@ -1,11 +1,14 @@
+import json
+from pathlib import Path
+
 import luigi
 import xarray as xr
 import yaml
-from pathlib import Path
 from PIL import Image
-import json
+
 try:
     import orjson
+
     HAS_JSON = True
 except ImportError:
     HAS_JSON = False

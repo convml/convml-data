@@ -3,8 +3,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from convml_tt.data.sources.pipeline import (GenerateRegriddedScenes,
-                                             GenerateSceneIDs, parse_scene_id)
+from convml_tt.data.sources.pipeline import (
+    GenerateRegriddedScenes,
+    GenerateSceneIDs,
+    parse_scene_id,
+)
 from tqdm import tqdm
 
 
@@ -62,7 +65,7 @@ def main(data_path=".", time_interval="1D"):
 
     fig, ax = plt.subplots(figsize=(12, 4))
     da = ds.resample(time=time_interval).count().completed_subtasks
-    da.plot(ax=ax, marker='.', hue="task")
+    da.plot(ax=ax, marker=".", hue="task")
     ax.set_ylim(0, 1.2 * da.max())
 
     fn = "processed_scenes.png"

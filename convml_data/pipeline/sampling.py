@@ -7,9 +7,9 @@ import luigi
 import numpy as np
 import regridcart as rc
 
-from ..utils.luigi import ImageTarget, XArrayTarget
 from .. import DataSource, goes16
 from ..les import LESDataFile
+from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
@@ -42,7 +42,8 @@ class SceneSourceFiles(luigi.Task):
             if ds.source == "goes16":
                 scene_source_files = all_source_files[self.scene_id]
                 task = goes16.pipeline.GOES16Fetch(
-                    keys=np.atleast_1d(scene_source_files).tolist(), data_path=source_data_path
+                    keys=np.atleast_1d(scene_source_files).tolist(),
+                    data_path=source_data_path,
                 )
             elif ds.source == "LES":
                 # assume that these files already exist
@@ -138,9 +139,7 @@ class CropSceneSourceFiles(luigi.Task):
     def output_path(self):
         ds = self.data_source
 
-        output_path = (
-            Path(self.data_path) / "source_data" / ds.source
-        )
+        output_path = Path(self.data_path) / "source_data" / ds.source
 
         if self.aux_product is None:
             output_path = output_path / ds.type
