@@ -1,14 +1,15 @@
 """
 Parser and class for representing dataset information given by `meta.yaml` files
 """
+import datetime
+import functools
 import pprint
 from pathlib import Path
-import yaml
+
 import dateutil.parser
-import datetime
 import numpy as np
-import functools
 import xarray as xr
+import yaml
 from regridcart import LocalCartesianDomain
 
 from .sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
@@ -86,11 +87,10 @@ class DataSource:
         elif domain_meta.get("kind") == "spanning_trajectories":
             ds_trajectories = _load_trajectories(datasource_meta=self._meta)
             kwargs = {}
-            if 'padding' in domain_meta:
-                kwargs['padding'] = domain_meta['padding']
+            if "padding" in domain_meta:
+                kwargs["padding"] = domain_meta["padding"]
             domain = TrajectoriesSpanningDomain(
-                ds_trajectories=ds_trajectories,
-                **kwargs
+                ds_trajectories=ds_trajectories, **kwargs
             )
         else:
             raise NotImplementedError(domain_meta)
@@ -220,7 +220,9 @@ class DataSource:
 
         found_valid_interval = False
         for t_start, t_end in self.time_intervals:
-            if np.datetime64(t_start) <= scene_time and scene_time <= np.datetime64(t_end):
+            if np.datetime64(t_start) <= scene_time and scene_time <= np.datetime64(
+                t_end
+            ):
                 found_valid_interval = True
         if not found_valid_interval:
             return False

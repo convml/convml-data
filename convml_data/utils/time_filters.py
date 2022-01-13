@@ -1,7 +1,7 @@
-import satdata
-import types
 import datetime
+import types
 
+import satdata
 
 DATETIME_ATTRS = [
     attr_name

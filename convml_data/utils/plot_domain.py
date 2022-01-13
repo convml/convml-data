@@ -1,14 +1,14 @@
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import cartopy.crs as ccrs
-import xarray as xr
-import numpy as np
 import luigi
+import matplotlib.pyplot as plt
+import numpy as np
+import xarray as xr
+from matplotlib.lines import Line2D
 
 from .. import DataSource
-from ..sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
 from ..pipeline.sampling import SceneSourceFiles
 from ..pipeline.scene_sources import GenerateSceneIDs
+from ..sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
 
 
 def _plot_scene_outline(ax, da_scene, scene_num=0, color="orange"):

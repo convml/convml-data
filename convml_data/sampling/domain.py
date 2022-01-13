@@ -2,14 +2,9 @@
 Utilities to create (approximate) square tiles from lat/lon satelite data
 """
 import cartopy.crs as ccrs
-import xarray as xr
 import numpy as np
-import matplotlib.pyplot as plt
-import itertools
-import matplotlib.patches as mpatches
-import shapely.geometry as geom
-import warnings
 import regridcart as rc
+import xarray as xr
 
 
 class LocalCartesianSquareTileDomain(rc.LocalCartesianDomain):
@@ -59,14 +54,14 @@ class CartesianSquareTileDomain(rc.CartesianDomain):
         relative to the origin in the parent domain
         """
         tile_latlon = domain.latlon_from_xy(
-            x=domain.x_c - self.x_c,
-            y=domain.y_c - self.y_c
+            x=domain.x_c - self.x_c, y=domain.y_c - self.y_c
         )
         return LocalCartesianSquareTileDomain(
             central_latitude=float(tile_latlon[1]),
             central_longitude=float(tile_latlon[0]),
             size=self.size,
-            x_c=self.x_c, y_c=self.y_c,
+            x_c=self.x_c,
+            y_c=self.y_c,
         )
 
 

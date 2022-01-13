@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ... import dataset as pytorch_dataset
-from ..pipeline import SceneRegriddedData, GenerateTiles
+from ..pipeline import GenerateTiles, SceneRegriddedData
 
 
 def get_pytorch_dataset(datasource, dataset_type, transform=None, **kwargs):

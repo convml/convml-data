@@ -1,10 +1,11 @@
 """
 Utilities for creating a images representing the scene source data
 """
+import io
+
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-import io
-import matplotlib.pyplot as plt
 
 from .. import goes16
 

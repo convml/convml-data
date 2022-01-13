@@ -45,13 +45,17 @@ def main(args=None):
     import argparse
 
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("datasource_name", choices=[ds.name for ds in ExampleDatasource])
+    argparser.add_argument(
+        "datasource_name", choices=[ds.name for ds in ExampleDatasource]
+    )
     argparser.add_argument("--path", default="data/", type=Path)
     args = argparser.parse_args(args=args)
     datasource_path = fetch_example_datasource(
         datasource=ExampleDatasource[args.datasource_name], data_dir=args.path
     )
-    print(f"Downloaded example datasource `{args.datasource_name}` to `{datasource_path}`")
+    print(
+        f"Downloaded example datasource `{args.datasource_name}` to `{datasource_path}`"
+    )
 
 
 if __name__ == "__main__":
