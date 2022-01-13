@@ -1,10 +1,11 @@
-from pathlib import Path
-from .utils.luigi import XArrayTarget, DBTarget
-from . import DataSource
-
-import xarray as xr
-import luigi
 import datetime
+from pathlib import Path
+
+import luigi
+import xarray as xr
+
+from . import DataSource
+from .utils.luigi import DBTarget, XArrayTarget
 
 
 class LESDataFile(luigi.Task):

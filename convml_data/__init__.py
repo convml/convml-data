@@ -1,13 +1,14 @@
 """
 Parser and class for representing dataset information given by `meta.yaml` files
 """
+import datetime
+import functools
 import pprint
 from pathlib import Path
-import yaml
+
 import dateutil.parser
-import datetime
 import numpy as np
-import functools
+import yaml
 from regridcart import LocalCartesianDomain
 
 from .sampling.domain import SourceDataDomain
@@ -73,7 +74,7 @@ class DataSource:
         sampling_meta = self._meta.get("sampling", {})
 
         if "triplets" in sampling_meta:
-            if not "resolution" in sampling_meta:
+            if "resolution" not in sampling_meta:
                 raise Exception(
                     "To do triplet sampling you must define the `resolution` "
                     "(in meters/pixel) in the `sampling` section"
@@ -186,7 +187,9 @@ class DataSource:
 
         found_valid_interval = False
         for t_start, t_end in self.time_intervals:
-            if np.datetime64(t_start) <= scene_time and scene_time <= np.datetime64(t_end):
+            if np.datetime64(t_start) <= scene_time and scene_time <= np.datetime64(
+                t_end
+            ):
                 found_valid_interval = True
         if not found_valid_interval:
             return False

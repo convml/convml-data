@@ -4,15 +4,13 @@ import luigi
 import numpy as np
 import regridcart as rc
 
-from ..utils.luigi import XArrayTarget, DBTarget
 from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..sampling import triplets as triplet_sampling
 from ..utils.domain_images import rgb_image_from_scene_data
+from ..utils.luigi import DBTarget, XArrayTarget
 from . import GenerateSceneIDs
-from .sampling import (CropSceneSourceFiles, SceneSourceFiles,
-                       _SceneRectSampleBase)
-
+from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
 
 # duplicated from `convml_tt`, do not change this
 TILE_IDENTIFIER_FORMAT = "{triplet_id:05d}_{tile_type}"
@@ -305,4 +303,4 @@ class GenerateTiles(luigi.Task):
             if len(tiles_meta) > 0:
                 tasks_tiles[scene_id] = SceneTilesData(scene_id=scene_id)
 
-        output = yield tasks_tiles
+        yield tasks_tiles
