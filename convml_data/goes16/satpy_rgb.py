@@ -76,13 +76,13 @@ def load_aux_file(scene_fn):
     # but we need to pick out the right variable in the dataset
     ds = xr.open_dataset(scene_fn)
     vars_2d = [
-        name for (name, da) in ds.data_vars.items() if len(da.shape) == 2
+        name for (name, da) in ds.data_vars.items() if set(da.dims) == {'x', 'y'}
     ]
     vars_2d.remove("DQF")
     if len(vars_2d) != 1:
         raise Exception(
             "More than the data-quality variable (DQF) was found "
-            "in the aux dataset"
+            f"in the aux dataset: {','.join(vars_2d)}"
         )
     var_name = vars_2d[0]
 
