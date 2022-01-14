@@ -19,6 +19,8 @@ class TilesInScene(luigi.Task):
     def requires(self):
         if self.tiles_kind == "triplets":
             return triplets.TripletSceneSplits(data_path=self.data_path)
+        if self.tiles_kind == "trajectories":
+            return trajectory_tiles.TilesPerScene(data_path=self.data_path)
 
         raise NotImplementedError(self.tiles_kind)
 
@@ -78,6 +80,8 @@ class SceneTileLocations(luigi.Task):
                 tile_locations = triplets.sample_triplet_tile_locations(
                     tiles_meta=tiles_meta, domain=domain, data_source=self.data_source
                 )
+            if self.tiles_kind == "trajectories":
+                tile_locations = tiles_meta
             else:
                 raise NotImplementedError(self.tiles_kind)
 
@@ -114,7 +118,7 @@ class SceneTilesData(_SceneRectSampleBase):
             )
 
         reqs["tile_locations"] = SceneTileLocations(
-            data_path=self.data_path, scene_id=self.scene_id
+            data_path=self.data_path, scene_id=self.scene_id, tiles_kind=self.tiles_kind
         )
 
         return reqs
@@ -150,6 +154,8 @@ class SceneTilesData(_SceneRectSampleBase):
     def tile_identifier_format(self):
         if self.tiles_kind == "triplets":
             tile_identifier_format = triplets.TILE_IDENTIFIER_FORMAT
+        elif self.tiles_kind == "trajectories":
+            tile_identifier_format = trajectory_tiles.TILE_IDENTIFIER_FORMAT
         else:
             raise NotImplementedError(self.tiles_kind)
 

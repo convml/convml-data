@@ -7,7 +7,7 @@ from ..utils.luigi import DBTarget
 from ..utils.time import find_nearest_time, npdt64_to_dt
 from . import GenerateSceneIDs, parse_scene_id
 
-TILE_IDENTIFIER_FORMAT = "{triplet_id:05d}_{tile_type}"
+TILE_IDENTIFIER_FORMAT = "{time_idx:05d}"
 
 
 class TilesPerScene(luigi.Task):
