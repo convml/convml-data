@@ -22,9 +22,12 @@ class SceneBulkProcessingBaseTask(luigi.Task):
                 "Please set TaskClass to the type you would like"
                 " to process for every scene"
             )
-        return self.SceneIDsTaskClass(
+        return self._get_scene_ids_task_class()(
             data_path=self.data_path, **self._get_scene_ids_task_kwargs()
         )
+
+    def _get_scene_ids_task_class(self):
+        return self.SceneIDsTaskClass
 
     def _get_task_class_kwargs(self, scene_ids):
         raise NotImplementedError(
