@@ -8,9 +8,9 @@ from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..utils.domain_images import align_axis_x, rgb_image_from_scene_data
 from ..utils.luigi import ImageTarget, XArrayTarget
-from . import GenerateSceneIDs
 from .aux_sources import CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
+from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
 
 
