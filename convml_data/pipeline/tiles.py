@@ -7,7 +7,7 @@ from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..utils.domain_images import rgb_image_from_scene_data
 from ..utils.luigi import DBTarget, XArrayTarget
-from . import triplets
+from . import trajectory_tiles, triplets
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
 
 
@@ -204,6 +204,8 @@ class GenerateTiles(luigi.Task):
     def requires(self):
         if self.tiles_kind == "triplets":
             return triplets.TripletSceneSplits(data_path=self.data_path)
+        if self.tiles_kind == "trajectories":
+            return trajectory_tiles.TilesPerScene(data_path=self.data_path)
 
         raise NotImplementedError(self.tiles_kind)
 

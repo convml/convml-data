@@ -14,6 +14,7 @@ from regridcart import LocalCartesianDomain
 
 from .sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
 from .utils import time_filters
+from .utils.time import find_nearest_time, npdt64_to_dt
 
 
 def _parse_datetime(o):
@@ -23,11 +24,7 @@ def _parse_datetime(o):
         return o
 
 
-def _npdt64_to_dt(v):
-    return v.astype("datetime64[s]").astype(datetime.datetime)
-
-
-def _load_trajectories(datasource_meta):
+def load_trajectories(datasource_meta):
     fn_trajectories = datasource_meta.get("trajectories", {}).get("filepath")
     if fn_trajectories is None:
         raise Exception(
@@ -85,7 +82,7 @@ class DataSource:
         elif domain_meta.get("kind") == "as_source":
             domain = SourceDataDomain()
         elif domain_meta.get("kind") == "spanning_trajectories":
-            ds_trajectories = _load_trajectories(datasource_meta=self._meta)
+            ds_trajectories = load_trajectories(datasource_meta=self._meta)
             kwargs = {}
             if "padding" in domain_meta:
                 kwargs["padding"] = domain_meta["padding"]
@@ -152,10 +149,10 @@ class DataSource:
                 )
             return
         elif time_meta.get("source") == "trajectories":
-            ds_trajectories = _load_trajectories(datasource_meta=self._meta)
+            ds_trajectories = load_trajectories(datasource_meta=self._meta)
             da_time = ds_trajectories.time
-            t_min = _npdt64_to_dt(da_time.min().values)
-            t_max = _npdt64_to_dt(da_time.max().values)
+            t_min = npdt64_to_dt(da_time.min().values)
+            t_max = npdt64_to_dt(da_time.max().values)
             self._time_intervals = [(t_min, t_max)]
         else:
             self._time_intervals = list(_parse_time_intervals(time_meta=time_meta))
@@ -256,14 +253,12 @@ class DataSource:
                 filter_fns.append(filter_fn)
 
         if map_scene_times_to_trajectory_times:
-            ds_trajectories = _load_trajectories(self._meta)
+            ds_trajectories = load_trajectories(self._meta)
             da_source_times = ds_trajectories.time
-            da_times = xr.DataArray(times)
             valid_times = []
             for t in da_source_times.values:
-                da_delta_t = np.abs(da_times - t)
-                da_t_nearest = da_times.isel(dim_0=da_delta_t.argmin())
-                valid_times.append(_npdt64_to_dt(da_t_nearest.values))
+                t_nearest = find_nearest_time(t=t, times=times)
+                valid_times.append(t_nearest)
             times = list(set(valid_times))
 
         for filter_fn in filter_fns:
