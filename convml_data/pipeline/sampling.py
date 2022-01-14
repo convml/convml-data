@@ -208,9 +208,14 @@ class SceneRectData(_SceneRectSampleBase):
 class GenerateCroppedScenes(SceneBulkProcessingBaseTask):
     data_path = luigi.Parameter(default=".")
     TaskClass = CropSceneSourceFiles
-    SceneIDsTaskClass = CheckForAuxiliaryFiles
 
     aux_product = luigi.OptionalParameter(default=None)
+
+    def _get_scene_ids_task_class(self):
+        if self.aux_product is None:
+            return GenerateSceneIDs
+        else:
+            return CheckForAuxiliaryFiles
 
     def _get_task_class_kwargs(self, scene_ids):
         return dict(aux_product=self.aux_product)
