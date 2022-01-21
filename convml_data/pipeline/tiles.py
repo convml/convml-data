@@ -111,13 +111,13 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
 
     @property
     def domain(self):
-        tile_locs = self.input()["tile_locations"].open()
+        tiles_meta = self.input()["tile_locations"].open()
 
         lats = []
         lons = []
-        for tile_loc in tile_locs:
-            lats.append(tile_loc["lat"])
-            lons.append(tile_loc["lon"])
+        for tile_meta in tiles_meta:
+            lats.append(tile_meta["loc"]["central_latitude"])
+            lons.append(tile_meta["loc"]["central_longitude"])
 
         da_lat = xr.DataArray(lats)
         da_lon = xr.DataArray(lons)
@@ -156,6 +156,7 @@ class SceneTilesData(_SceneRectSampleBase):
                 scene_id=self.scene_id,
                 data_path=self.data_path,
                 pad_ptc=self.crop_pad_ptc,
+                tiles_kind=self.tiles_kind,
             )
 
         reqs["tile_locations"] = SceneTileLocations(
