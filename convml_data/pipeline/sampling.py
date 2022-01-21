@@ -79,19 +79,30 @@ class CropSceneSourceFiles(luigi.Task):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
-        return SceneSourceFiles(
-            data_path=self.data_path,
-            scene_id=self.scene_id,
-            aux_product=self.aux_product,
+        return dict(
+            data=SceneSourceFiles(
+                data_path=self.data_path,
+                scene_id=self.scene_id,
+                aux_product=self.aux_product,
+            )
         )
+
+    @property
+    def domain(self):
+        data_source = self.data_source
+        domain = data_source.domain
+        ds_input = self.input().open()
+        if isinstance(domain, rc.LocalCartesianDomain):
+            domain.validate_dataset(ds=ds_input)
+        return domain
 
     def run(self):
         data_source = self.data_source
 
         if data_source.source == "goes16":
-            inputs = self.input()
+            inputs = self.input()["data"]
             if self.aux_product is not None:
-                da_full = goes16.satpy_rgb.load_aux_file(scene_fn=self.input()[0].fn)
+                da_full = goes16.satpy_rgb.load_aux_file(scene_fn=inputs.fn)
             elif data_source.type == "truecolor_rgb":
                 if not len(inputs) == 3:
                     raise Exception(
@@ -105,18 +116,11 @@ class CropSceneSourceFiles(luigi.Task):
                 )
             else:
                 raise NotImplementedError(data_source.type)
-        elif data_source.source == "LES":
-            domain = data_source.domain
-            ds_input = self.input().open()
-            if isinstance(domain, rc.LocalCartesianDomain):
-                domain.validate_dataset(ds=ds_input)
-
-            raise NotADirectoryError(42)
         else:
             raise NotImplementedError(data_source.source)
 
         da_cropped = rc.crop_field_to_domain(
-            domain=data_source.domain, da=da_full, pad_pct=self.pad_ptc
+            domain=self.domain, da=da_full, pad_pct=self.pad_ptc
         )
 
         img_cropped = None

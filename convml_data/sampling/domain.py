@@ -160,11 +160,8 @@ class SourceDataDomain:
             raise NotImplementedError(ds.coords)
 
 
-class TrajectoriesSpanningDomain(rc.LocalCartesianDomain):
-    def __init__(self, ds_trajectories, padding=1.2):
-        self.ds = ds_trajectories
-        da_lon = self.ds.lon
-        da_lat = self.ds.lat
+class LatLonPointsSpanningDomain(rc.LocalCartesianDomain):
+    def __init__(self, da_lat, da_lon, padding=1.2):
 
         # use median values as origin for domain
         # TODO: make a better choice
@@ -201,6 +198,14 @@ class TrajectoriesSpanningDomain(rc.LocalCartesianDomain):
             l_zonal=l_zonal,
             l_meridional=l_meridional,
         )
+
+
+class TrajectoriesSpanningDomain(LatLonPointsSpanningDomain):
+    def __init__(self, ds_trajectories, padding=1.2):
+        self.ds = ds_trajectories
+        da_lon = self.ds.lon
+        da_lat = self.ds.lat
+        super().__init__(da_lat=da_lat, da_lon=da_lon, padding=padding)
 
     def plot_trajectories(self, ax=None):
         if ax is None:

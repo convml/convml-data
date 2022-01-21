@@ -2,6 +2,7 @@ from pathlib import Path
 
 import luigi
 import regridcart as rc
+import xarray as xr
 
 from .. import DataSource
 from ..sampling import domain as sampling_domain
@@ -94,6 +95,46 @@ class SceneTileLocations(luigi.Task):
         return DBTarget(path=p, db_type="yaml", db_name=name)
 
 
+class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
+    tiles_kind = luigi.Parameter()
+    scene_id = luigi.Parameter()
+    data_path = luigi.Parameter(default=".")
+
+    def requires(self):
+        reqs = super().requires()
+
+        reqs["tile_locations"] = SceneTileLocations(
+            data_path=self.data_path, scene_id=self.scene_id, tiles_kind=self.tiles_kind
+        )
+
+        return reqs
+
+    @property
+    def domain(self):
+        tile_locs = self.input()["tile_locations"].open()
+
+        lats = []
+        lons = []
+        for tile_loc in tile_locs:
+            lats.append(tile_loc["lat"])
+            lons.append(tile_loc["lon"])
+
+        da_lat = xr.DataArray(lats)
+        da_lon = xr.DataArray(lons)
+
+        domain = sampling_domain.LatLonPointsSpanningDomain(
+            da_lat=da_lat, da_lon=da_lon
+        )
+        return domain
+
+    @property
+    def output_path(self):
+        output_path = super().output_path
+        assert output_path.name == "cropped"
+
+        return output_path.parent / f"cropped_for_{self.tiles_kind}"
+
+
 class SceneTilesData(_SceneRectSampleBase):
     tiles_kind = luigi.Parameter()
 
@@ -111,7 +152,7 @@ class SceneTilesData(_SceneRectSampleBase):
                 data_path=self.data_path,
             )
         else:
-            reqs["source_data"] = CropSceneSourceFiles(
+            reqs["source_data"] = CropSceneSourceFilesForTiles(
                 scene_id=self.scene_id,
                 data_path=self.data_path,
                 pad_ptc=self.crop_pad_ptc,
