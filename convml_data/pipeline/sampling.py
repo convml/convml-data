@@ -72,7 +72,6 @@ class CropSceneSourceFiles(luigi.Task):
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
     aux_product = luigi.OptionalParameter(default=None)
-    make_image = luigi.BoolParameter(default=False)
 
     @property
     def data_source(self):
@@ -120,16 +119,15 @@ class CropSceneSourceFiles(luigi.Task):
         )
 
         img_cropped = None
-        if self.make_image:
-            if data_source.source == "goes16" and data_source.type == "truecolor_rgb":
-                if self.aux_product is None:
-                    img_cropped = goes16.satpy_rgb.rgb_da_to_img(da=da_cropped)
-                    if "_satpy_id" in da_cropped.attrs:
-                        del da_cropped.attrs["_satpy_id"]
-                else:
-                    da_cropped.attrs.update(da_full.attrs)
+        if data_source.source == "goes16" and data_source.type == "truecolor_rgb":
+            if self.aux_product is None:
+                img_cropped = goes16.satpy_rgb.rgb_da_to_img(da=da_cropped)
+                if "_satpy_id" in da_cropped.attrs:
+                    del da_cropped.attrs["_satpy_id"]
             else:
-                raise NotImplementedError(data_source.source)
+                da_cropped.attrs.update(da_full.attrs)
+        else:
+            raise NotImplementedError(data_source.source)
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
