@@ -33,8 +33,8 @@ class TilesInScene(luigi.Task):
         self.output().write(scene_tiles_meta)
 
     def output(self):
-        p = Path(self.data_path) / "tiles"
-        return DBTarget(path=p, db_type="yaml", db_name="f{self.scene_id}_tiles")
+        p = Path(self.data_path) / self.tiles_kind
+        return DBTarget(path=p, db_type="yaml", db_name=f"{self.scene_id}_tiles")
 
 
 class SceneTileLocations(luigi.Task):
@@ -81,7 +81,7 @@ class SceneTileLocations(luigi.Task):
                 tile_locations = triplets.sample_triplet_tile_locations(
                     tiles_meta=tiles_meta, domain=domain, data_source=self.data_source
                 )
-            if self.tiles_kind == "trajectories":
+            elif self.tiles_kind == "trajectories":
                 tile_locations = tiles_meta
             else:
                 raise NotImplementedError(self.tiles_kind)
@@ -91,7 +91,7 @@ class SceneTileLocations(luigi.Task):
 
     def output(self):
         name = f"tile_locations.{self.scene_id}"
-        p = Path(self.data_path) / "triplets"
+        p = Path(self.data_path) / self.tiles_kind
         return DBTarget(path=p, db_type="yaml", db_name=name)
 
 
@@ -218,7 +218,7 @@ class SceneTilesData(_SceneRectSampleBase):
 
         tiles_meta = self.input()["tile_locations"].open()
 
-        tile_data_path = Path(self.data_path) / "triplets"
+        tile_data_path = Path(self.data_path) / self.tiles_kind
 
         outputs = {}
 

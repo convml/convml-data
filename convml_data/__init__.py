@@ -135,6 +135,8 @@ class DataSource:
             # TODO calculate tile size here
             assert "scene_collections_splitting" in triplets_meta
             assert sum(triplets_meta["N_triplets"].values()) > 0
+        elif "trajectories" in sampling_meta:
+            assert "tile_N" in sampling_meta
 
         self.sampling = sampling_meta
 

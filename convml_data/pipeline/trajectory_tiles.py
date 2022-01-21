@@ -1,13 +1,15 @@
 from pathlib import Path
 
 import luigi
+import regridcart as rc
 
 from .. import DataSource, load_trajectories
+from ..sampling.domain import LocalCartesianSquareTileDomain
 from ..utils.luigi import DBTarget
 from ..utils.time import find_nearest_time, npdt64_to_dt
 from . import GenerateSceneIDs, parse_scene_id
 
-TILE_IDENTIFIER_FORMAT = "{time_idx:05d}"
+TILE_IDENTIFIER_FORMAT = "{scene_id}"
 
 
 class TilesPerScene(luigi.Task):
@@ -36,20 +38,35 @@ class TilesPerScene(luigi.Task):
         ds_trajectories = load_trajectories(datasource_meta=datasource._meta)
         da_times_traj = ds_trajectories.time
 
+        sampling_meta = datasource.sampling
+        dx = datasource.sampling["resolution"]
+        tile_N = sampling_meta["trajectories"]["tile_N"]
+        tile_size = dx * tile_N
+
         tiles_per_scene = {}
         for scene_id in scene_ids:
             _, t_scene = parse_scene_id(scene_id)
             t_traj, time_idx = find_nearest_time(
                 t=t_scene, times=da_times_traj, return_index=True
             )
-            da_traj_pt = ds_trajectories.sel(time=t_traj)
+            ds_traj_pt = ds_trajectories.sel(time=t_traj)
+
+            if isinstance(datasource.domain, rc.LocalCartesianDomain):
+                tile_domain = LocalCartesianSquareTileDomain(
+                    central_latitude=ds_traj_pt.lat.values,
+                    central_longitude=ds_traj_pt.lon.values,
+                    size=tile_size,
+                )
+            else:
+                raise NotImplementedError(datasource.domain)
 
             scene_tiles = tiles_per_scene.setdefault(str(scene_id), [])
+
             tile_meta = dict(
                 time_idx=time_idx,
-                lat=da_traj_pt.lat.item(),
-                lon=da_traj_pt.lon.item(),
-                time=npdt64_to_dt(da_traj_pt.time.values),
+                time=npdt64_to_dt(ds_traj_pt.time.values),
+                loc=tile_domain.serialize(),
+                scene_id=scene_id,
             )
             scene_tiles.append(tile_meta)
 
@@ -57,5 +74,5 @@ class TilesPerScene(luigi.Task):
         self.output().write(tiles_per_scene)
 
     def output(self):
-        p = Path(self.data_path) / "trajectory_tiles"
+        p = Path(self.data_path) / "trajectories"
         return DBTarget(path=p, db_type="yaml", db_name="tiles_per_scene")
