@@ -4,4 +4,7 @@
 # system, and so shouldn't trigger E1101 when accessed.
 generated-members=numpy.*, torch.*
 good-names=i,j,df,n_*,t,n,fh,ex,da,ds,ax,lx,ly
-disable=missing-class-docstring,missing-function-docstring,missing-module-docstring,no-member
+disable=missing-docstring,no-member
+
+[FORMAT]
+good-names=i,j,df,n_*,p,N_*,n,ds,dx

@@ -93,9 +93,8 @@ class FindLESFiles(luigi.Task):
                 # split into individual files
                 fn_root = Path(file_path).name.replace(".nc", "")
                 p_file_root = Path(file_path).parent
+                times = data_source.filter_scene_times(times)
                 for time in times:
-                    if not data_source.valid_scene_time(time):
-                        continue
                     dt = _dt64_to_datetime(dt64=time)
                     t_str = dt.isoformat().replace(":", "")
                     filename = f"{fn_root}_{t_str}.nc"

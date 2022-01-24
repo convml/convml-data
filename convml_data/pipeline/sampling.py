@@ -71,14 +71,26 @@ class CropSceneSourceFiles(luigi.Task):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
-        return SceneSourceFiles(
-            data_path=self.data_path,
-            scene_id=self.scene_id,
-            aux_product=self.aux_product,
+        return dict(
+            data=SceneSourceFiles(
+                data_path=self.data_path,
+                scene_id=self.scene_id,
+                aux_product=self.aux_product,
+            )
         )
+
+    @property
+    def domain(self):
+        data_source = self.data_source
+        domain = data_source.domain
+        ds_input = self.input().open()
+        if isinstance(domain, rc.LocalCartesianDomain):
+            domain.validate_dataset(ds=ds_input)
+        return domain
 
     def run(self):
         data_source = self.data_source
+
         if self.aux_product is not None:
             product = self.aux_product
         else:
@@ -94,7 +106,7 @@ class CropSceneSourceFiles(luigi.Task):
             domain.validate_dataset(da_full)
 
         da_cropped = rc.crop_field_to_domain(
-            domain=data_source.domain, da=da_full, pad_pct=self.pad_ptc
+            domain=self.domain, da=da_full, pad_pct=self.pad_ptc
         )
 
         img_cropped = None

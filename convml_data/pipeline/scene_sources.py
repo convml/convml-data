@@ -134,10 +134,13 @@ class GenerateSceneIDs(luigi.Task):
         else:
             raise NotImplementedError(input)
 
+        valid_scene_times = data_source.filter_scene_times(list(scenes_by_time.keys()))
+
         scenes = {
-            make_scene_id(source=data_source.source, t_scene=t_scene): scene_files
-            for (t_scene, scene_files) in scenes_by_time.items()
-            if data_source.valid_scene_time(t_scene)
+            make_scene_id(source=data_source.source, t_scene=t_scene): scenes_by_time[
+                t_scene
+            ]
+            for t_scene in valid_scene_times
         }
 
         Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
