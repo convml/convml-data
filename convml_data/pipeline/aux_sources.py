@@ -84,13 +84,13 @@ class CheckForAuxiliaryFiles(luigi.Task):
                     for fn in aux_product_filenames
                 ]
             )
-            for scene_id, scene_time in zip(scene_ids, scene_times):
-                dt_all = np.abs(scene_time - aux_times)
+            for aux_filename, aux_time in zip(aux_product_filenames, aux_times):
+                dt_all = np.abs(scene_times - aux_time)
                 i = np.argmin(dt_all)
                 dt = dt_all[i]
                 if dt <= self.dt_max:
-                    product_fn = aux_product_filenames[i]
-                    product_fn_for_scenes[scene_id] = product_fn
+                    scene_id = scene_ids[i]
+                    product_fn_for_scenes[scene_id] = aux_filename
                 if dt < dt_min:
                     dt_min = dt
 

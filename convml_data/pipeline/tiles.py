@@ -9,6 +9,7 @@ from ..sampling import domain as sampling_domain
 from ..sources import create_image as create_source_image
 from ..utils.luigi import DBTarget, XArrayTarget
 from . import trajectory_tiles, triplets
+from .aux_sources import CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
 
 
@@ -203,6 +204,7 @@ class SceneTilesData(_SceneRectSampleBase):
             method = "nearest_s2d"
             da_tile = rc.resample(domain=tile_domain, da=da_src, dx=dx, method=method)
             tile_output = self.output()[tile_identifier]
+            Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
             tile_output["data"].write(da_tile)
 
             img_tile = create_source_image(
@@ -238,6 +240,8 @@ class SceneTilesData(_SceneRectSampleBase):
         tiles_meta = self.input()["tile_locations"].open()
 
         tile_data_path = Path(self.data_path) / self.tiles_kind
+        if self.aux_name is not None:
+            tile_data_path /= self.aux_name
 
         outputs = {}
 
@@ -269,18 +273,35 @@ class GenerateTiles(luigi.Task):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
+        tasks = {}
         if self.tiles_kind == "triplets":
-            return triplets.TripletSceneSplits(data_path=self.data_path)
-        if self.tiles_kind == "trajectories":
-            return trajectory_tiles.TilesPerScene(data_path=self.data_path)
+            tasks["tiles_per_scene"] = triplets.TripletSceneSplits(
+                data_path=self.data_path
+            )
+        elif self.tiles_kind == "trajectories":
+            tasks["tiles_per_scene"] = trajectory_tiles.TilesPerScene(
+                data_path=self.data_path
+            )
+        else:
+            raise NotImplementedError(self.tiles_kind)
 
-        raise NotImplementedError(self.tiles_kind)
+        if self.aux_name is not None:
+            tasks["scene_ids"] = CheckForAuxiliaryFiles(
+                data_path=self.data_path, aux_name=self.aux_name
+            )
+
+        return tasks
 
     def run(self):
-        tiles_per_scene = self.input().open()
+        tiles_per_scene = self.input()["tiles_per_scene"].open()
+        if "scene_ids" in self.input():
+            scene_ids = list(self.input()["scene_ids"].open().keys())
+        else:
+            scene_ids = list(tiles_per_scene.keys())
 
         tasks_tiles = {}
-        for scene_id, tiles_meta in tiles_per_scene.items():
+        for scene_id in scene_ids:
+            tiles_meta = tiles_per_scene[scene_id]
             if len(tiles_meta) > 0:
                 tasks_tiles[scene_id] = SceneTilesData(
                     scene_id=scene_id,
