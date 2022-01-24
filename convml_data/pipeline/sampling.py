@@ -101,8 +101,8 @@ class CropSceneSourceFiles(luigi.Task):
         )
 
         domain = data_source.domain
-        if isinstance(domain, rc.LocalCartesianDomain):
-            domain.validate_dataset(da_full)
+        # if isinstance(domain, rc.LocalCartesianDomain):
+        # domain.validate_dataset(da_full)
 
         da_cropped = rc.crop_field_to_domain(
             domain=domain, da=da_full, pad_pct=self.pad_ptc
@@ -127,12 +127,14 @@ class CropSceneSourceFiles(luigi.Task):
     def output_path(self):
         ds = self.data_source
 
-        output_path = Path(self.data_path) / "source_data" / ds.source
+        output_path = Path(self.data_path) / "source_data"
 
         if self.aux_name is None:
-            output_path = output_path / ds.type
+            output_path = output_path / ds.source / ds.type
         else:
-            output_path = output_path / "aux" / self.aux_name
+            source_type = self.data_source.aux_products[self.aux_name]["type"]
+            source_name = self.data_source.aux_products[self.aux_name]["source"]
+            output_path = output_path / source_name / source_type
 
         output_path = output_path / "cropped"
 
