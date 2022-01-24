@@ -6,7 +6,8 @@ import regridcart as rc
 
 from .. import DataSource
 from ..sampling import domain as sampling_domain
-from ..utils.domain_images import align_axis_x, rgb_image_from_scene_data
+from ..sources import create_image as create_source_image
+from ..utils.domain_images import align_axis_x
 from ..utils.luigi import ImageTarget, XArrayTarget
 from . import GenerateSceneIDs
 from .aux_sources import CheckForAuxiliaryFiles
@@ -98,28 +99,18 @@ class SceneRegriddedData(_SceneRectSampleBase):
 
             dx = self.scene_resolution
 
-            if self.aux_product is None:
-                method = "bilinear"
-            else:
-                method = "nearest_s2d"
+            method = "nearest_s2d"
             da_domain = rc.resample(domain=domain, da=da_src, dx=dx, method=method)
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
         else:
             da_domain = domain_output["data"].open()
 
-        if self.aux_product is not None:
-            img_domain = self.input()["base"]["image"].open()
-            fig, _ = _plot_scene_aux(da_aux=da_domain, img=img_domain)
-            fig.savefig(domain_output["image"].fn)
-        else:
-            # need the scene attrs to generate a rgb image
-            if da_src is None:
-                da_src = self.input()["source_data"]["data"].open()
-            img_domain = rgb_image_from_scene_data(
-                data_source=data_source, da_scene=da_domain, src_attrs=da_src.attrs
-            )
-            img_domain.save(str(domain_output["image"].fn))
+        img_domain = create_source_image(
+            da=da_domain, data_source=data_source.source, product="truecolor_rgb"
+        )
+
+        img_domain.save(str(domain_output["image"].fn))
 
     def output(self):
         scene_data_path = Path(self.data_path) / "rect"
@@ -157,6 +148,8 @@ class GenerateRegriddedScenes(SceneBulkProcessingBaseTask):
             TaskClass = GenerateSceneIDs
         else:
             TaskClass = CheckForAuxiliaryFiles
+
+        raise Exception(42)
 
         return TaskClass(data_path=self.data_path, **self._get_scene_ids_task_kwargs())
 

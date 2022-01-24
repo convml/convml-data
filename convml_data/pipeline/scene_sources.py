@@ -8,8 +8,7 @@ from pathlib import Path
 import luigi
 
 from .. import DataSource
-from ..goes16.pipeline import GOES16Query
-from ..les import FindLESFiles
+from ..sources import build_query_tasks, get_time_for_filename
 from ..utils.luigi import DBTarget
 
 log = logging.getLogger()
@@ -59,15 +58,6 @@ def merge_multichannel_sources(files_per_channel, time_fn):
     return scene_filesets
 
 
-def get_time_for_filename(data_source, filename):
-    if data_source.source == "goes16":
-        return GOES16Query.get_time(filename=filename)
-    elif data_source.source == "LES":
-        return FindLESFiles.get_time(filename=filename)
-    else:
-        raise NotImplementedError(data_source)
-
-
 class GenerateSceneIDs(luigi.Task):
     """
     Construct a "database" (actually a yaml or json-file) of all scene IDs in a
@@ -85,84 +75,62 @@ class GenerateSceneIDs(luigi.Task):
         data_source = self.data_source
         source_data_path = Path(self.data_path) / "source_data" / data_source.source
 
-        tasks = None
-        if data_source.source == "goes16":
-            if data_source.type == "truecolor_rgb":
-                tasks = {}
-                for t_start, t_end in data_source.time_intervals:
-                    dt_total = t_end - t_start
-                    t_center = t_start + dt_total / 2.0
-
-                    for channel in [1, 2, 3]:
-                        t = GOES16Query(
-                            data_path=source_data_path,
-                            time=t_center,
-                            dt_max=dt_total / 2.0,
-                            channel=channel,
-                        )
-                        tasks.setdefault(channel, []).append(t)
-            else:
-                raise NotImplementedError(data_source.type)
-        elif data_source.source == "LES":
-            kind, *variables = data_source.type.split("__")
-            if not kind == "singlechannel":
-                raise NotImplementedError(data_source.type)
-            else:
-                source_variable = variables[0]
-
-            filename_glob = (
-                data_source.files is not None and data_source.files or "*.nc"
-            )
-            tasks = FindLESFiles(
-                data_path=source_data_path,
-                source_variable=source_variable,
-                filename_glob=filename_glob,
-            )
-        else:
-            raise NotImplementedError(data_source.source)
+        tasks = build_query_tasks(
+            source_name=data_source.source,
+            source_type=data_source.type,
+            source_data_path=source_data_path,
+            time_intervals=data_source.time_intervals,
+        )
 
         return tasks
 
-    def run(self):
+    def _create_scenes_from_multichannel_queries(self):
         data_source = self.data_source
         scenes_by_time = {}
+        channels_and_filenames = OrderedDict()
+        if data_source.type == "truecolor_rgb":
+            channel_order = [1, 2, 3]
+        else:
+            raise NotImplementedError(data_source.type)
+
+        opened_inputs = {}
+        for input_name, input_parts in self.input.items():
+            opened_inputs[input_name] = list(
+                itertools.chain(*[input_part.open() for input_part in input_parts])
+            )
+
+        for channel in channel_order:
+            channels_and_filenames[channel] = opened_inputs[channel]
+
+        time_fn = partial(get_time_for_filename, data_source=data_source)
+
+        scene_sets = merge_multichannel_sources(channels_and_filenames, time_fn=time_fn)
+
+        for scene_filenames in scene_sets:
+            t_scene = get_time_for_filename(
+                filename=scene_filenames[0], data_source=data_source
+            )
+            scenes_by_time[t_scene] = scene_filenames
+        return scenes_by_time
+
+    def run(self):
+        data_source = self.data_source
 
         input = self.input()
         if type(input) == dict:
-            channels_and_filenames = OrderedDict()
-            if data_source.type == "truecolor_rgb":
-                channel_order = [1, 2, 3]
-            else:
-                raise NotImplementedError(data_source.type)
-
-            opened_inputs = {}
-            for input_name, input_parts in input.items():
-                opened_inputs[input_name] = list(
-                    itertools.chain(*[input_part.open() for input_part in input_parts])
-                )
-
-            for channel in channel_order:
-                channels_and_filenames[channel] = opened_inputs[channel]
-
-            time_fn = partial(get_time_for_filename, data_source=data_source)
-
-            scene_sets = merge_multichannel_sources(
-                channels_and_filenames, time_fn=time_fn
-            )
-
-            for scene_filenames in scene_sets:
-                t_scene = get_time_for_filename(
-                    filename=scene_filenames[0], data_source=data_source
-                )
-                scenes_by_time[t_scene] = scene_filenames
-        elif isinstance(input, DBTarget):
-            # this represents LES-based sources
-            scene_filenames = input.open()
-            for scene_filename in scene_filenames:
-                t_scene = get_time_for_filename(
-                    filename=scene_filename, data_source=data_source
-                )
-                scenes_by_time[t_scene] = scene_filename
+            # multi-channel queries, each channel is represented by a key in the
+            # dictionary
+            scenes_by_time = self._create_scenes_from_multichannel_queries()
+        elif type(input) == list:
+            # single-channel queries
+            scenes_by_time = {}
+            for input in self.input():
+                filename_per_scene = input.open()
+                for scene_filename in filename_per_scene:
+                    t_scene = get_time_for_filename(
+                        filename=scene_filename, data_source=data_source
+                    )
+                    scenes_by_time[t_scene] = scene_filename
         else:
             raise NotImplementedError(input)
 

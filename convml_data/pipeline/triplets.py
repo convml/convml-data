@@ -7,7 +7,7 @@ import regridcart as rc
 from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..sampling import triplets as triplet_sampling
-from ..utils.domain_images import rgb_image_from_scene_data
+from ..sources.images import rgb_image_from_scene_data
 from ..utils.luigi import DBTarget, XArrayTarget
 from . import GenerateSceneIDs
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase

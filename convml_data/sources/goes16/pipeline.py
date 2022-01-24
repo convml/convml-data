@@ -5,7 +5,7 @@ import isodate
 import luigi
 import satdata
 
-from ..utils.luigi import XArrayTarget, YAMLTarget
+from ...utils.luigi import XArrayTarget, YAMLTarget
 
 
 class DatetimeListParameter(luigi.Parameter):

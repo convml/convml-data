@@ -5,7 +5,7 @@ import luigi
 import numpy as np
 
 from .. import DataSource
-from ..goes16.pipeline import GOES16Query
+from ..sources import build_query_tasks
 from ..utils.luigi import DBTarget
 from .scene_sources import GenerateSceneIDs, get_time_for_filename, parse_scene_id
 
@@ -32,34 +32,12 @@ class CheckForAuxiliaryFiles(luigi.Task):
         data_source = self.data_source
         source_data_path = Path(self.data_path) / "source_data" / data_source.source
 
-        tasks["product"] = []
-        if data_source.source == "goes16":
-            aux_products = data_source._meta.get("aux_products", [])
-
-            if self.product_name not in aux_products:
-                raise Exception(
-                    f"To fetch the `{self.product_name}` please add it to the meta info"
-                )
-
-            product = self.product_name
-
-            for t_start, t_end in data_source.time_intervals:
-                dt_total = t_end - t_start
-                t_center = t_start + dt_total / 2.0
-
-                t = GOES16Query(
-                    data_path=source_data_path,
-                    time=t_center,
-                    dt_max=dt_total / 2.0,
-                    channel=None,
-                    product=product,
-                )
-                tasks["product"].append(t)
-
-        elif data_source.source == "LES":
-            pass
-        else:
-            raise NotImplementedError(data_source.source)
+        tasks["product"] = build_query_tasks(
+            source_name=data_source.source,
+            source_type=self.product_name,
+            source_data_path=source_data_path,
+            time_intervals=data_source.time_intervals,
+        )
 
         return tasks
 

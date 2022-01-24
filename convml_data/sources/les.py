@@ -4,8 +4,8 @@ from pathlib import Path
 import luigi
 import xarray as xr
 
-from . import DataSource
-from .utils.luigi import DBTarget, XArrayTarget
+from .. import DataSource
+from ..utils.luigi import DBTarget, XArrayTarget
 
 
 class LESDataFile(luigi.Task):
