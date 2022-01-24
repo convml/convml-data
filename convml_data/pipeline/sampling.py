@@ -4,11 +4,10 @@ pipeline tasks related to spatial cropping, reprojection and sampling of scene d
 from pathlib import Path
 
 import luigi
-import numpy as np
 import regridcart as rc
 
-from .. import DataSource, goes16
-from ..les import LESDataFile
+from .. import DataSource
+from ..sources import build_fetch_tasks, create_image, extract_variable
 from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
 from .scene_sources import GenerateSceneIDs
@@ -18,16 +17,16 @@ from .utils import SceneBulkProcessingBaseTask
 class SceneSourceFiles(luigi.Task):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
-    aux_product = luigi.OptionalParameter(default=None)
+    aux_name = luigi.OptionalParameter(default=None)
 
     @property
     def data_source(self):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
-        if self.aux_product is not None:
+        if self.aux_name is not None:
             return CheckForAuxiliaryFiles(
-                data_path=self.data_path, product_name=self.aux_product
+                data_path=self.data_path, aux_name=self.aux_name
             )
         else:
             return GenerateSceneIDs(data_path=self.data_path)
@@ -35,22 +34,21 @@ class SceneSourceFiles(luigi.Task):
     def _build_fetch_tasks(self):
         task = None
         ds = self.data_source
-        source_data_path = Path(self.data_path) / "source_data" / ds.source
+
+        if self.aux_name is None:
+            source_name = ds.source
+        else:
+            source_name = self.data_source.aux_products[self.aux_name]["source"]
+        source_data_path = Path(self.data_path) / "source_data" / source_name
 
         if self.input().exists():
             all_source_files = self.input().open()
-            if ds.source == "goes16":
-                scene_source_files = all_source_files[self.scene_id]
-                task = goes16.pipeline.GOES16Fetch(
-                    keys=np.atleast_1d(scene_source_files).tolist(),
-                    data_path=source_data_path,
-                )
-            elif ds.source == "LES":
-                # assume that these files already exist
-                scene_source_file = all_source_files[self.scene_id]
-                task = LESDataFile(file_path=scene_source_file)
-            else:
-                raise NotImplementedError(ds.source)
+            scene_source_files = all_source_files[self.scene_id]
+            task = build_fetch_tasks(
+                scene_source_files=scene_source_files,
+                source_name=source_name,
+                source_data_path=source_data_path,
+            )
 
         return task
 
@@ -71,63 +69,53 @@ class CropSceneSourceFiles(luigi.Task):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
-    aux_product = luigi.OptionalParameter(default=None)
+    aux_name = luigi.OptionalParameter(default=None)
 
     @property
     def data_source(self):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
-        return SceneSourceFiles(
-            data_path=self.data_path,
-            scene_id=self.scene_id,
-            aux_product=self.aux_product,
+        return dict(
+            data=SceneSourceFiles(
+                data_path=self.data_path,
+                scene_id=self.scene_id,
+                aux_name=self.aux_name,
+            )
         )
 
     def run(self):
         data_source = self.data_source
 
-        if data_source.source == "goes16":
-            inputs = self.input()
-            if self.aux_product is not None:
-                da_full = goes16.satpy_rgb.load_aux_file(scene_fn=self.input()[0].fn)
-            elif data_source.type == "truecolor_rgb":
-                if not len(inputs) == 3:
-                    raise Exception(
-                        "To create TrueColor RGB images for GOES-16 the first"
-                        " three Radiance channels (1, 2, 3) are needed"
-                    )
-
-                scene_fns = [inp.fn for inp in inputs]
-                da_full = goes16.satpy_rgb.load_rgb_files_and_get_composite_da(
-                    scene_fns=scene_fns
-                )
-            else:
-                raise NotImplementedError(data_source.type)
-        elif data_source.source == "LES":
-            domain = data_source.domain
-            ds_input = self.input().open()
-            if isinstance(domain, rc.LocalCartesianDomain):
-                domain.validate_dataset(ds=ds_input)
-
-            raise NotADirectoryError(42)
+        if self.aux_name is None:
+            source_name = data_source.source
+            product = data_source.type
         else:
-            raise NotImplementedError(data_source.source)
+            source_name = self.data_source.aux_products[self.aux_name]["source"]
+            product = self.data_source.aux_products[self.aux_name]["type"]
+
+        da_full = extract_variable(
+            task_input=self.input()["data"],
+            data_source=source_name,
+            product=product,
+        )
+
+        domain = data_source.domain
+        # if isinstance(domain, rc.LocalCartesianDomain):
+        # domain.validate_dataset(da_full)
 
         da_cropped = rc.crop_field_to_domain(
-            domain=data_source.domain, da=da_full, pad_pct=self.pad_ptc
+            domain=domain, da=da_full, pad_pct=self.pad_ptc
         )
 
         img_cropped = None
-        if data_source.source == "goes16" and data_source.type == "truecolor_rgb":
-            if self.aux_product is None:
-                img_cropped = goes16.satpy_rgb.rgb_da_to_img(da=da_cropped)
-                if "_satpy_id" in da_cropped.attrs:
-                    del da_cropped.attrs["_satpy_id"]
-            else:
-                da_cropped.attrs.update(da_full.attrs)
-        else:
-            raise NotImplementedError(data_source.source)
+        if data_source.source == "goes16" and product == "truecolor_rgb":
+            # to be able to create a RGB image with satpy we need to set the
+            # attrs again to ensure we get a proper RGB image
+            da_cropped.attrs.update(da_full.attrs)
+            img_cropped = create_image(
+                da=da_cropped, data_source=data_source.source, product=product
+            )
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
@@ -139,12 +127,14 @@ class CropSceneSourceFiles(luigi.Task):
     def output_path(self):
         ds = self.data_source
 
-        output_path = Path(self.data_path) / "source_data" / ds.source
+        output_path = Path(self.data_path) / "source_data"
 
-        if self.aux_product is None:
-            output_path = output_path / ds.type
+        if self.aux_name is None:
+            output_path = output_path / ds.source / ds.type
         else:
-            output_path = output_path / "aux" / self.aux_product
+            source_type = self.data_source.aux_products[self.aux_name]["type"]
+            source_name = self.data_source.aux_products[self.aux_name]["source"]
+            output_path = output_path / source_name / source_type
 
         output_path = output_path / "cropped"
 
@@ -157,7 +147,7 @@ class CropSceneSourceFiles(luigi.Task):
         outputs = dict(data=XArrayTarget(str(data_path / fn_data)))
 
         data_source = self.data_source
-        if data_source.source == "goes16" and self.aux_product is None:
+        if data_source.source == "goes16" and self.aux_name is None:
             if data_source.type == "truecolor_rgb":
                 fn_image = f"{self.scene_id}.png"
                 outputs["image"] = ImageTarget(str(data_path / fn_image))
@@ -174,7 +164,7 @@ class _SceneRectSampleBase(luigi.Task):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
-    aux_product = luigi.OptionalParameter(default=None)
+    aux_name = luigi.OptionalParameter(default=None)
 
     def requires(self):
         t_scene_ids = GenerateSceneIDs(data_path=self.data_path)
@@ -190,7 +180,7 @@ class _SceneRectSampleBase(luigi.Task):
             scene_id=self.scene_id,
             data_path=self.data_path,
             pad_ptc=self.crop_pad_ptc,
-            aux_product=self.aux_product,
+            aux_name=self.aux_name,
         )
 
 
@@ -208,14 +198,19 @@ class SceneRectData(_SceneRectSampleBase):
 class GenerateCroppedScenes(SceneBulkProcessingBaseTask):
     data_path = luigi.Parameter(default=".")
     TaskClass = CropSceneSourceFiles
-    SceneIDsTaskClass = CheckForAuxiliaryFiles
 
-    aux_product = luigi.OptionalParameter(default=None)
+    aux_name = luigi.OptionalParameter(default=None)
+
+    def _get_scene_ids_task_class(self):
+        if self.aux_name is None:
+            return GenerateSceneIDs
+        else:
+            return CheckForAuxiliaryFiles
 
     def _get_task_class_kwargs(self, scene_ids):
-        return dict(aux_product=self.aux_product)
+        return dict(aux_name=self.aux_name)
 
     def _get_scene_ids_task_kwargs(self):
-        if self.aux_product is None:
+        if self.aux_name is None:
             return {}
-        return dict(product_name=self.aux_product)
+        return dict(aux_name=self.aux_name)

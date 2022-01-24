@@ -7,12 +7,15 @@ import pprint
 from pathlib import Path
 
 import dateutil.parser
+import isodate
 import numpy as np
+import xarray as xr
 import yaml
 from regridcart import LocalCartesianDomain
 
-from .sampling.domain import SourceDataDomain
+from .sampling.domain import SourceDataDomain, TrajectoriesSpanningDomain
 from .utils import time_filters
+from .utils.time import find_nearest_time, npdt64_to_dt
 
 
 def _parse_datetime(o):
@@ -22,20 +25,34 @@ def _parse_datetime(o):
         return o
 
 
+def load_trajectories(datasource_meta):
+    fn_trajectories = datasource_meta.get("trajectories", {}).get("filepath")
+    if fn_trajectories is None:
+        raise Exception(
+            "Please set the trajectories filepath by defining the value of"
+            " `filepath` within `trajectories` in the root of meta.yaml"
+        )
+    ds_trajectories = xr.open_dataset(fn_trajectories)
+    return ds_trajectories
+
+
 def _parse_time_intervals(time_meta):
     if "intervals" in time_meta:
         for time_interval_meta in time_meta["intervals"]:
             for time_interval in _parse_time_intervals(time_meta=time_interval_meta):
                 yield time_interval
     else:
-        t_start = _parse_datetime(time_meta["t_start"])
-        if "N_days" in time_meta:
-            duration = datetime.timedelta(days=time_meta["N_days"])
-            t_end = t_start + duration
-        elif "t_end" in time_meta:
-            t_end = _parse_datetime(time_meta["t_end"])
+        if "t_start" in time_meta:
+            t_start = _parse_datetime(time_meta["t_start"])
+            if "N_days" in time_meta:
+                duration = datetime.timedelta(days=time_meta["N_days"])
+                t_end = t_start + duration
+            elif "t_end" in time_meta:
+                t_end = _parse_datetime(time_meta["t_end"])
+            else:
+                raise NotImplementedError(time_meta)
         else:
-            raise NotImplementedError(time_meta["time"])
+            raise NotImplementedError(time_meta)
 
         yield (t_start, t_end)
 
@@ -47,6 +64,7 @@ class DataSource:
         self._parse_time_meta()
         self._parse_sampling_meta()
         self._parse_domain_meta()
+        self._parse_aux_products()
 
         assert "source" in self._meta
         assert "type" in self._meta
@@ -65,6 +83,14 @@ class DataSource:
             domain = LocalCartesianDomain(**kwargs)
         elif domain_meta.get("kind") == "as_source":
             domain = SourceDataDomain()
+        elif domain_meta.get("kind") == "spanning_trajectories":
+            ds_trajectories = load_trajectories(datasource_meta=self._meta)
+            kwargs = {}
+            if "padding" in domain_meta:
+                kwargs["padding"] = domain_meta["padding"]
+            domain = TrajectoriesSpanningDomain(
+                ds_trajectories=ds_trajectories, **kwargs
+            )
         else:
             raise NotImplementedError(domain_meta)
 
@@ -111,6 +137,8 @@ class DataSource:
             # TODO calculate tile size here
             assert "scene_collections_splitting" in triplets_meta
             assert sum(triplets_meta["N_triplets"].values()) > 0
+        elif "trajectories" in sampling_meta:
+            assert "tile_N" in sampling_meta
 
         self.sampling = sampling_meta
 
@@ -124,8 +152,26 @@ class DataSource:
                     "(N_days) in a `time` section of `meta.yaml`"
                 )
             return
+        elif time_meta.get("source") == "trajectories":
+            ds_trajectories = load_trajectories(datasource_meta=self._meta)
+            da_time = ds_trajectories.time
+            t_min = npdt64_to_dt(da_time.min().values)
+            t_max = npdt64_to_dt(da_time.max().values)
+            self._time_intervals = [(t_min, t_max)]
         else:
             self._time_intervals = list(_parse_time_intervals(time_meta=time_meta))
+
+    def _parse_aux_products(self):
+        aux_products_meta = self._meta.get("aux_products", {})
+        self.aux_products = {}
+        for aux_name, aux_product_meta in aux_products_meta.items():
+            assert "source" in aux_product_meta
+            assert "type" in aux_product_meta
+            if "dt_max" in aux_product_meta:
+                aux_product_meta["dt_max"] = np.timedelta64(
+                    isodate.parse_duration(aux_product_meta["dt_max"])
+                )
+            self.aux_products[aux_name] = aux_product_meta
 
     @property
     def time_intervals(self):
@@ -177,25 +223,32 @@ class DataSource:
             {k: v for k, v in self._meta.items() if not k.startswith("_")}
         )
 
-    def valid_scene_time(self, scene_time):
+    def filter_scene_times(self, times):
         """
         Apply the time filtering specified for this source dataset if one is specified
         """
         time_meta = self._meta.get("time")
         if time_meta is None:
-            return True
-
-        found_valid_interval = False
-        for t_start, t_end in self.time_intervals:
-            if np.datetime64(t_start) <= scene_time and scene_time <= np.datetime64(
-                t_end
-            ):
-                found_valid_interval = True
-        if not found_valid_interval:
-            return False
+            return times
 
         filters = time_meta.get("filters", {})
+
+        # first we add our own filter which always has to be satisfied: the
+        # values fit within the selected time intervals
+        def _within_time_intervals(t):
+            found_valid_interval = False
+            for t_start, t_end in self.time_intervals:
+                if np.datetime64(t_start) <= t and t <= np.datetime64(t_end):
+                    found_valid_interval = True
+
+            return found_valid_interval
+
+        filter_fns = []
+        filter_fns.append(_within_time_intervals)
+
+        map_scene_times_to_trajectory_times = False
         for filter_kind, filter_value in filters.items():
+            filter_fn = None
             if filter_kind == "N_hours_from_zenith":
                 lon_zenith = self.domain.central_longitude
                 filter_fn = functools.partial(
@@ -207,10 +260,27 @@ class DataSource:
                 filter_fn = functools.partial(
                     time_filters.within_attr_values, **{filter_kind: filter_value}
                 )
+            elif filter_kind == "using_trajectory_sampling" and filter_value is True:
+                map_scene_times_to_trajectory_times = True
             else:
                 raise NotImplementedError(filter_kind)
 
-            if not filter_fn(scene_time):
-                return False
+            if filter_fn is not None:
+                filter_fns.append(filter_fn)
 
-        return True
+        if map_scene_times_to_trajectory_times:
+            ds_trajectories = load_trajectories(self._meta)
+            da_source_times = ds_trajectories.time
+            valid_times = []
+            for t in da_source_times.values:
+                t_nearest = find_nearest_time(t=t, times=times)
+                valid_times.append(t_nearest)
+            times = list(set(valid_times))
+
+        for filter_fn in filter_fns:
+            times = list(filter(filter_fn, times))
+
+        if len(times) == 0:
+            raise Exception("No valid times found")
+
+        return times

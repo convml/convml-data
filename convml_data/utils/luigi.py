@@ -13,9 +13,14 @@ try:
 except ImportError:
     HAS_JSON = False
 
+import logging
+
+logger = logging.getLogger("luigi")
+
 import coloredlogs
 
-coloredlogs.install()
+coloredlogs.install(level="DEBUG", logger=logger)
+# coloredlogs.install()
 
 
 class XArrayTarget(luigi.LocalTarget):

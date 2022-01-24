@@ -13,6 +13,7 @@ def test_make_triplets():
         )
         task_rect_data = GenerateTiles(
             data_path=datasource_path,
+            tiles_kind="triplets",
         )
         luigi.build([task_rect_data], local_scheduler=True)
 

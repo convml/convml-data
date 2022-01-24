@@ -1,3 +1,4 @@
+from .regridding import GenerateRegriddedScenes, SceneRegriddedData  # noqa
 from .sampling import GenerateCroppedScenes  # noqa
 from .scene_sources import (  # noqa
     SCENE_ID_DATE_FORMAT,
@@ -5,8 +6,7 @@ from .scene_sources import (  # noqa
     make_scene_id,
     parse_scene_id,
 )
-from .tiles import GenerateRegriddedScenes, SceneRegriddedData  # noqa
-from .triplets import GenerateTiles  # noqa
+from .tiles import GenerateTiles  # noqa
 from .utils import SceneBulkProcessingBaseTask  # noqa
 
 

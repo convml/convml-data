@@ -162,13 +162,25 @@ sampling:
 
 For some sources (for example `goes16`) there may be auxiliary data fields that
 you would like to download and regrid to use during inference time. You should
-list the ones you wish to download using the `aux_products` part of the
-`meta.yaml` file:
+define the ones you wish to download using the `aux_products` part of the
+`meta.yaml` file. This done through creating named groups in the `aux_products`
+section. In the example the cloud-top height product from two different sources
+will be fetched and can be regridded onto the domain (and any tiles you might
+want to sample):
 
 ```yaml
 aux_products:
-  - ACHA
+  cloud_top_height_goes16:
+    source: goes16
+    type: ACHA
+  cloud_top_height_ceres:
+    source: ceres
+    type: goes16n__cloud_top_height
 ```
+
+To produce regridded data on the whole domain or for tiles the argument
+`--aux-name <aux_product_identifier>` can be added to the pipeline commands
+given below.
 
 # Processing pipeline
 
@@ -189,7 +201,7 @@ $> python -m luigi --module convml_data.pipeline GenerateSceneIDs
 
 ```bash
 luigi --module convml_data.pipeline GenerateCroppedScenes
-luigi --module convml_data.pipeline GenerateCroppedScenes --aux-product ACHA
+luigi --module convml_data.pipeline GenerateCroppedScenes --aux-name cloud_top_height_ceres
 ```
 
 # Triplet-based analysis
@@ -198,6 +210,7 @@ luigi --module convml_data.pipeline GenerateCroppedScenes --aux-product ACHA
 
 ```bash
 luigi --module convml_data.pipeline GenerateTiles
+luigi --module convml_data.pipeline GenerateTiles --aux-name cloud_top_height_ceres
 ```
 
 
@@ -214,7 +227,7 @@ luigi --local-scheduler --module convml_tt.interpretation.rectpred.pipeline.data
 
 ```bash
 luigi --module convml_data.pipeline GenerateRegriddedScenes
-luigi --module convml_data.pipeline GenerateRegriddedScenes --aux-product ACHA
+luigi --module convml_data.pipeline GenerateRegriddedScenes --aux-name cloud_top_height_ceres
 ```
 
 ## Plotting optical flow trajectories for all scenes
