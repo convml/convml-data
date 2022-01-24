@@ -122,9 +122,23 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
         da_lat = xr.DataArray(lats)
         da_lon = xr.DataArray(lons)
 
-        domain = sampling_domain.LatLonPointsSpanningDomain(
+        domain_spanning = sampling_domain.LatLonPointsSpanningDomain(
             da_lat=da_lat, da_lon=da_lon
         )
+
+        datasource = DataSource.load(path=self.data_path)
+        sampling_meta = datasource.sampling
+        dx = datasource.sampling["resolution"]
+        tile_N = sampling_meta["trajectories"]["tile_N"]
+        tile_size = dx * tile_N
+
+        domain = rc.LocalCartesianDomain(
+            central_longitude=domain_spanning.central_longitude,
+            central_latitude=domain_spanning.central_latitude,
+            l_zonal=domain_spanning.l_zonal + 2 * tile_size,
+            l_meridional=domain_spanning.l_meridional + 2 * tile_size,
+        )
+
         return domain
 
     @property
