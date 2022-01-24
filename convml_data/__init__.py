@@ -7,6 +7,7 @@ import pprint
 from pathlib import Path
 
 import dateutil.parser
+import isodate
 import numpy as np
 import xarray as xr
 import yaml
@@ -63,6 +64,7 @@ class DataSource:
         self._parse_time_meta()
         self._parse_sampling_meta()
         self._parse_domain_meta()
+        self._parse_aux_products()
 
         assert "source" in self._meta
         assert "type" in self._meta
@@ -158,6 +160,18 @@ class DataSource:
             self._time_intervals = [(t_min, t_max)]
         else:
             self._time_intervals = list(_parse_time_intervals(time_meta=time_meta))
+
+    def _parse_aux_products(self):
+        aux_products_meta = self._meta.get("aux_products", {})
+        self.aux_products = {}
+        for aux_name, aux_product_meta in aux_products_meta.items():
+            assert "source" in aux_product_meta
+            assert "type" in aux_product_meta
+            if "dt_max" in aux_product_meta:
+                aux_product_meta["dt_max"] = np.timedelta64(
+                    isodate.parse_duration(aux_product_meta["dt_max"])
+                )
+            self.aux_products[aux_name] = aux_product_meta
 
     @property
     def time_intervals(self):

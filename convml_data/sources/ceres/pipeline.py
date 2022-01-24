@@ -62,6 +62,7 @@ class FetchFile(luigi.Task):
 
         version = "V01.2"
         url = make_url(platform_id=platform_id, version=version, time=time)
+        Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
         download_file(url, self.output().path)
 
     def output(self):

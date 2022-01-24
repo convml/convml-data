@@ -137,6 +137,7 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
 
 class SceneTilesData(_SceneRectSampleBase):
     tiles_kind = luigi.Parameter()
+    aux_name = luigi.OptionalParameter(default=None)
 
     @property
     def data_source(self):
@@ -150,6 +151,7 @@ class SceneTilesData(_SceneRectSampleBase):
             reqs["source_data"] = SceneSourceFiles(
                 scene_id=self.scene_id,
                 data_path=self.data_path,
+                aux_name=self.aux_name,
             )
         else:
             reqs["source_data"] = CropSceneSourceFilesForTiles(
@@ -157,6 +159,7 @@ class SceneTilesData(_SceneRectSampleBase):
                 data_path=self.data_path,
                 pad_ptc=self.crop_pad_ptc,
                 tiles_kind=self.tiles_kind,
+                aux_name=self.aux_name,
             )
 
         reqs["tile_locations"] = SceneTileLocations(
@@ -245,6 +248,7 @@ class GenerateTiles(luigi.Task):
 
     data_path = luigi.Parameter(default=".")
     tiles_kind = luigi.Parameter()
+    aux_name = luigi.OptionalParameter(default=None)
 
     @property
     def data_source(self):
@@ -265,7 +269,9 @@ class GenerateTiles(luigi.Task):
         for scene_id, tiles_meta in tiles_per_scene.items():
             if len(tiles_meta) > 0:
                 tasks_tiles[scene_id] = SceneTilesData(
-                    scene_id=scene_id, tiles_kind=self.tiles_kind
+                    scene_id=scene_id,
+                    tiles_kind=self.tiles_kind,
+                    aux_name=self.aux_name,
                 )
 
         yield tasks_tiles

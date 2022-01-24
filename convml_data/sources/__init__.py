@@ -42,7 +42,7 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
             source_variable=source_variable,
             filename_glob=filename_glob,
         )
-    elif source_name == "CERES":
+    elif source_name == "ceres":
         tasks = []
         for t_start, t_end in time_intervals:
             t = ceres.pipeline.QueryForData(
@@ -70,7 +70,7 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
     elif source_name == "LES":
         # assume that these files already exist
         task = LESDataFile(file_path=scene_source_files)
-    elif source_name == "CERES":
+    elif source_name == "ceres":
         task = ceres.pipeline.FetchFile(
             filename=scene_source_files,
             data_path=Path(source_data_path) / "raw",
@@ -81,27 +81,27 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
     return task
 
 
-def get_time_for_filename(data_source, filename):
+def get_time_for_filename(source_name, filename):
     """Return the timestamp for a given source data file"""
-    if data_source.source == "goes16":
+    if source_name == "goes16":
         t = GOES16Query.get_time(filename=filename)
-    elif data_source.source == "LES":
+    elif source_name == "LES":
         t = FindLESFiles.get_time(filename=filename)
-    elif data_source.source == "CERES":
+    elif source_name == "ceres":
         t = ceres.pipeline.QueryForData.get_time(filename=filename)
     else:
-        raise NotImplementedError(data_source.source)
+        raise NotImplementedError(source_name)
 
     return t
 
 
 def extract_variable(task_input, data_source, product):
-    if data_source == "CERES":
+    if data_source == "ceres":
         _, var_name = product.split("__")
         ds = task_input.open()
         da = ds[var_name].rename(longitude="lon", latitude="lat")
     elif data_source == "goes16":
-        if data_source.type == "truecolor_rgb":
+        if product == "truecolor_rgb":
             if not len(task_input) == 3:
                 raise Exception(
                     "To create TrueColor RGB images for GOES-16 the first"

@@ -6,7 +6,8 @@ import regridcart as rc
 
 from .. import DataSource
 from ..sampling import domain as sampling_domain
-from ..utils.domain_images import align_axis_x, rgb_image_from_scene_data
+from ..sources.images import rgb_image_from_scene_data
+from ..utils.domain_images import align_axis_x
 from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
