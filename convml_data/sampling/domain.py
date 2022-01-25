@@ -160,13 +160,40 @@ class SourceDataDomain:
             raise NotImplementedError(ds.coords)
 
 
-class LatLonPointsSpanningDomain(rc.LocalCartesianDomain):
-    def __init__(self, da_lat, da_lon, padding=1.2):
+def _calc_latlon_center(lat, lon):
+    """
+    Calculate lat/lon center for a set of points given by lat/lon coordinates.
+    Units are expected to be in degrees
 
-        # use median values as origin for domain
-        # TODO: make a better choice
-        lon_origin = da_lon.median().item()
-        lat_origin = da_lat.median().item()
+    based on: https://stackoverflow.com/q/6671183/271776
+    """
+    lat = lat * np.pi / 180.0
+    lon = lon * np.pi / 180.0
+
+    x = np.cos(lat) * np.cos(lon)
+    y = np.cos(lat) * np.sin(lon)
+    z = np.sin(lat)
+
+    # compute average x, y and z coordinates.
+    x_ = x.mean()
+    y_ = y.mean()
+    z_ = z.mean()
+
+    # convert average x, y, z coordinate to latitude and longitude
+    lon_center = np.arctan2(y_, x_)
+    hyp_center = np.sqrt(x_ * x_ + y_ * y_)
+    lat_center = np.arctan2(z_, hyp_center)
+
+    print(lat_center, lon_center)
+
+    return lat_center * 180.0 / np.pi, lon_center * 180.0 / np.pi
+
+
+class LatLonPointsSpanningDomain(rc.LocalCartesianDomain):
+    def __init__(self, da_lat, da_lon, padding=1.1):
+        lat_origin, lon_origin = _calc_latlon_center(
+            lat=da_lat.values, lon=da_lon.values
+        )
 
         # create a domain with no span but positioned at the correct point
         # so that ew can calculate the maximum zonal and meridional span
