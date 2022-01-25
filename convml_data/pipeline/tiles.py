@@ -86,6 +86,8 @@ class SceneTileLocations(luigi.Task):
                 tile_locations = tiles_meta
             else:
                 raise NotImplementedError(self.tiles_kind)
+        else:
+            tile_locations = []
 
         Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
         self.output().write(tile_locations)
@@ -200,6 +202,13 @@ class SceneTilesData(_SceneRectSampleBase):
         data_source = self.data_source
         dx = data_source.sampling["resolution"]
 
+        if self.aux_name is None:
+            source_name = data_source.source
+            product = data_source.type
+        else:
+            source_name = self.data_source.aux_products[self.aux_name]["source"]
+            product = self.data_source.aux_products[self.aux_name]["type"]
+
         for tile_identifier, tile_domain in self.tile_domains:
             method = "nearest_s2d"
             da_tile = rc.resample(domain=tile_domain, da=da_src, dx=dx, method=method)
@@ -207,8 +216,15 @@ class SceneTilesData(_SceneRectSampleBase):
             Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
             tile_output["data"].write(da_tile)
 
+            if source_name == "goes16" and product == "truecolor_rgb":
+                # to be able to create a RGB image with satpy we need to set the
+                # attrs again to ensure we get a proper RGB image
+                da_tile.attrs.update(da_src.attrs)
+
+            # if self.aux_name is not None:
+            # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
             img_tile = create_source_image(
-                da=da_tile, data_source=data_source.source, product="truecolor_rgb"
+                da=da_tile, data_source=source_name, product=product
             )
             img_tile.save(str(tile_output["image"].fn))
 

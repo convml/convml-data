@@ -109,13 +109,13 @@ class CropSceneSourceFiles(luigi.Task):
         )
 
         img_cropped = None
-        if data_source.source == "goes16" and product == "truecolor_rgb":
+        if source_name == "goes16" and product == "truecolor_rgb":
             # to be able to create a RGB image with satpy we need to set the
             # attrs again to ensure we get a proper RGB image
             da_cropped.attrs.update(da_full.attrs)
-            img_cropped = create_image(
-                da=da_cropped, data_source=data_source.source, product=product
-            )
+        img_cropped = create_image(
+            da=da_cropped, data_source=data_source.source, product=product
+        )
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
@@ -146,11 +146,8 @@ class CropSceneSourceFiles(luigi.Task):
         fn_data = f"{self.scene_id}.nc"
         outputs = dict(data=XArrayTarget(str(data_path / fn_data)))
 
-        data_source = self.data_source
-        if data_source.source == "goes16" and self.aux_name is None:
-            if data_source.type == "truecolor_rgb":
-                fn_image = f"{self.scene_id}.png"
-                outputs["image"] = ImageTarget(str(data_path / fn_image))
+        fn_image = f"{self.scene_id}.png"
+        outputs["image"] = ImageTarget(str(data_path / fn_image))
 
         return outputs
 

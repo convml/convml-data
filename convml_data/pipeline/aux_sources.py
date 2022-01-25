@@ -6,7 +6,12 @@ import numpy as np
 from .. import DataSource
 from ..sources import build_query_tasks
 from ..utils.luigi import DBTarget
-from .scene_sources import GenerateSceneIDs, get_time_for_filename, parse_scene_id
+from .scene_sources import (
+    GenerateSceneIDs,
+    create_scenes_from_multichannel_queries,
+    get_time_for_filename,
+    parse_scene_id,
+)
 
 
 class CheckForAuxiliaryFiles(luigi.Task):
@@ -72,27 +77,42 @@ class CheckForAuxiliaryFiles(luigi.Task):
         scene_ids = list(inputs.pop("scene_ids").open().keys())
         scene_times = np.array([parse_scene_id(scene_id)[1] for scene_id in scene_ids])
 
-        aux_source_name = self.aux_source_name
+        product_input = inputs["product"]
 
+        # create a mapping from aux_scene_time -> aux_scene_filename(s)
+        aux_source_name = self.aux_source_name
+        aux_product_name = self.aux_product_name
+        if type(product_input) == dict:
+            aux_scenes_by_time = create_scenes_from_multichannel_queries(
+                inputs=product_input,
+                source_name=aux_source_name,
+                product=aux_product_name,
+            )
+        else:
+            aux_scenes_by_time = {}
+            for product_inputs in inputs["product"]:
+                aux_product_filenames = product_inputs.open()
+                aux_times = np.array(
+                    [
+                        get_time_for_filename(source_name=aux_source_name, filename=fn)
+                        for fn in aux_product_filenames
+                    ]
+                )
+                for (t, filename) in zip(aux_times, aux_product_filenames):
+                    aux_scenes_by_time[t] = filename
+
+        # now match these aux scene times with the scene IDs we've already got
         product_fn_for_scenes = {}
         dt_min = np.timedelta64(365, "D")
-        for product_inputs in inputs["product"]:
-            aux_product_filenames = product_inputs.open()
-            aux_times = np.array(
-                [
-                    get_time_for_filename(source_name=aux_source_name, filename=fn)
-                    for fn in aux_product_filenames
-                ]
-            )
-            for aux_filename, aux_time in zip(aux_product_filenames, aux_times):
-                dt_all = np.abs(scene_times - aux_time)
-                i = np.argmin(dt_all)
-                dt = dt_all[i]
-                if dt <= self.dt_max:
-                    scene_id = scene_ids[i]
-                    product_fn_for_scenes[scene_id] = aux_filename
-                if dt < dt_min:
-                    dt_min = dt
+        for aux_time, aux_scene in aux_scenes_by_time.items():
+            dt_all = np.abs(scene_times - aux_time)
+            i = np.argmin(dt_all)
+            dt = dt_all[i]
+            if dt <= self.dt_max:
+                scene_id = scene_ids[i]
+                product_fn_for_scenes[scene_id] = aux_scene
+            if dt < dt_min:
+                dt_min = dt
 
         if len(product_fn_for_scenes) == 0:
             raise Exception(

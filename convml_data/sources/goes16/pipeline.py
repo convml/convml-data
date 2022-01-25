@@ -24,9 +24,13 @@ class GOES16Query(luigi.Task):
     data_path = luigi.Parameter()
     product = luigi.OptionalParameter(default=None)
 
+    @classmethod
+    def get_time(cls, filename):
+        return cls.parse_filename(filename=filename)["start_time"]
+
     @staticmethod
-    def get_time(filename):
-        return satdata.Goes16AWS.parse_key(filename, parse_times=True)["start_time"]
+    def parse_filename(filename):
+        return satdata.Goes16AWS.parse_key(filename, parse_times=True)
 
     def run(self):
         cli = satdata.Goes16AWS(offline=False)
