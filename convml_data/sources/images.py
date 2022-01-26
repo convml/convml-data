@@ -87,7 +87,10 @@ def rgb_image_from_scene_data(data_source, product, da_scene, **kwargs):
         elif product.startswith("multichannel__") or product.startswith(
             "singlechannel__"
         ):
-            height = 5.0
+            dpi = 100.0
+            ny = int(da_scene.y.count())
+            height = ny / dpi
+
             lx, ly = (
                 da_scene.x.max() - da_scene.x.min(),
                 da_scene.y.max() - da_scene.y.min(),
@@ -95,6 +98,7 @@ def rgb_image_from_scene_data(data_source, product, da_scene, **kwargs):
             width = height / ly * lx
             fig, ax = plt.subplots(figsize=(width, height))
             ax.set_aspect(1.0)
+            ax.set_position([0.0, 0.0, 1.0, 1.0])
 
             if product.startswith("multichannel__"):
                 channels = [int(v) for v in product.split("__")[1].split("_")]
