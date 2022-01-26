@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 from . import ceres, goes16
 from . import images as source_images
@@ -12,21 +13,26 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
     """return collection of luigi.Task objects that will query a data source"""
     if source_name == "goes16":
         if source_type == "truecolor_rgb":
-            tasks = {}
-            for t_start, t_end in time_intervals:
-                dt_total = t_end - t_start
-                t_center = t_start + dt_total / 2.0
-
-                for channel in [1, 2, 3]:
-                    t = GOES16Query(
-                        data_path=source_data_path,
-                        time=t_center,
-                        dt_max=dt_total / 2.0,
-                        channel=channel,
-                    )
-                    tasks.setdefault(channel, []).append(t)
+            channels = [1, 2, 3]
+        elif source_type.startswith("multichannel__"):
+            _, channels_str = source_type.split("__")
+            channels = [int(v) for v in channels_str.split("_")]
         else:
             raise NotImplementedError(source_type)
+
+        tasks = {}
+        for t_start, t_end in time_intervals:
+            dt_total = t_end - t_start
+            t_center = t_start + dt_total / 2.0
+
+            for channel in channels:
+                t = GOES16Query(
+                    data_path=source_data_path,
+                    time=t_center,
+                    dt_max=dt_total / 2.0,
+                    channel=channel,
+                )
+                tasks.setdefault(channel, []).append(t)
     elif source_name == "LES":
         kind, *variables = source_type.split("__")
 
@@ -112,6 +118,20 @@ def extract_variable(task_input, data_source, product):
             da = goes16.satpy_rgb.load_rgb_files_and_get_composite_da(
                 scene_fns=scene_fns
             )
+        elif product.startswith("multichannel__"):
+            das = []
+            for task_channel in task_input:
+                path = task_channel.path
+                file_meta = GOES16Query.parse_filename(filename=path)
+                channel_number = file_meta["channel"]
+                da = goes16.satpy_rgb.load_radiance_channel(
+                    scene_fn=path, channel_number=channel_number
+                )
+                da["channel"] = channel_number
+                das.append(da)
+            # TODO: may need to do some regridding here if we try to stack
+            # channels with different spatial resolution
+            da = xr.concat(das, dim="channel")
         else:
             da = goes16.satpy_rgb.load_aux_file(scene_fn=task_input)
     elif data_source == "LES":

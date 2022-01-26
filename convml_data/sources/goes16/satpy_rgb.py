@@ -102,6 +102,30 @@ def load_aux_file(scene_fn):
     return da
 
 
+def load_radiance_channel(scene_fn, channel_number):
+    # for radiance channel fields we simply open so we can crop them
+    # but we need to pick out the right variable in the dataset
+
+    var_name = f"C{channel_number:02d}"
+    ds = xr.open_dataset(scene_fn)
+
+    scene = satpy.Scene(reader="abi_l1b", filenames=[scene_fn])
+    scene.load([var_name])
+
+    da = scene[var_name]
+    if "crs" in da.coords:
+        da = da.drop("crs")
+
+    # set the projection info in a CF-compliant manner so we can load it later
+    grid_mapping_var = da.grid_mapping
+    da[grid_mapping_var] = ds[grid_mapping_var]
+
+    # remove all attributes that satpy adds which can't be serialised to a netCDF file
+    da = _cleanup_composite_da_attrs(da)
+
+    return da
+
+
 def rgb_da_to_img(da):
     # need to sort by y otherize resulting image is flipped... there must be a
     # better way

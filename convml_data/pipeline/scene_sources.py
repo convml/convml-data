@@ -58,6 +58,35 @@ def merge_multichannel_sources(files_per_channel, time_fn):
     return scene_filesets
 
 
+def create_scenes_from_multichannel_queries(inputs, source_name, product):
+    scenes_by_time = {}
+    channels_and_filenames = OrderedDict()
+    if product == "truecolor_rgb":
+        channel_order = [1, 2, 3]
+    elif product.startswith("multichannel__"):
+        channel_order = [int(v) for v in product.split("__")[1].split("_")]
+    else:
+        raise NotImplementedError(product)
+
+    opened_inputs = {}
+    for input_name, input_parts in inputs.items():
+        opened_inputs[input_name] = list(
+            itertools.chain(*[input_part.open() for input_part in input_parts])
+        )
+
+    for channel in channel_order:
+        channels_and_filenames[channel] = opened_inputs[channel]
+
+    time_fn = partial(get_time_for_filename, source_name=source_name)
+
+    scene_sets = merge_multichannel_sources(channels_and_filenames, time_fn=time_fn)
+
+    for scene_filenames in scene_sets:
+        t_scene = time_fn(filename=scene_filenames[0])
+        scenes_by_time[t_scene] = scene_filenames
+    return scenes_by_time
+
+
 class GenerateSceneIDs(luigi.Task):
     """
     Construct a "database" (actually a yaml or json-file) of all scene IDs in a
@@ -84,35 +113,6 @@ class GenerateSceneIDs(luigi.Task):
 
         return tasks
 
-    def _create_scenes_from_multichannel_queries(self):
-        data_source = self.data_source
-        scenes_by_time = {}
-        channels_and_filenames = OrderedDict()
-        if data_source.type == "truecolor_rgb":
-            channel_order = [1, 2, 3]
-        else:
-            raise NotImplementedError(data_source.type)
-
-        opened_inputs = {}
-        for input_name, input_parts in self.input.items():
-            opened_inputs[input_name] = list(
-                itertools.chain(*[input_part.open() for input_part in input_parts])
-            )
-
-        for channel in channel_order:
-            channels_and_filenames[channel] = opened_inputs[channel]
-
-        time_fn = partial(get_time_for_filename, data_source=data_source)
-
-        scene_sets = merge_multichannel_sources(channels_and_filenames, time_fn=time_fn)
-
-        for scene_filenames in scene_sets:
-            t_scene = get_time_for_filename(
-                filename=scene_filenames[0], data_source=data_source
-            )
-            scenes_by_time[t_scene] = scene_filenames
-        return scenes_by_time
-
     def run(self):
         data_source = self.data_source
 
@@ -120,7 +120,11 @@ class GenerateSceneIDs(luigi.Task):
         if type(input) == dict:
             # multi-channel queries, each channel is represented by a key in the
             # dictionary
-            scenes_by_time = self._create_scenes_from_multichannel_queries()
+            scenes_by_time = create_scenes_from_multichannel_queries(
+                inputs=self.input(),
+                source_name=self.data_source.source,
+                product=self.data_source.type,
+            )
         elif type(input) == list:
             # single-channel queries
             scenes_by_time = {}
@@ -128,7 +132,7 @@ class GenerateSceneIDs(luigi.Task):
                 filename_per_scene = input.open()
                 for scene_filename in filename_per_scene:
                     t_scene = get_time_for_filename(
-                        filename=scene_filename, data_source=data_source
+                        filename=scene_filename, source_name=data_source.source
                     )
                     scenes_by_time[t_scene] = scene_filename
         else:

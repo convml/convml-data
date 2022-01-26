@@ -92,6 +92,10 @@ class TripletSceneSplits(luigi.Task):
         )
 
         tiles_per_scene = {}
+        # first populate the tiles_per_scene collection so there's an entry for
+        # each scene ID
+        for scene_id in scene_ids:
+            tiles_per_scene[scene_id] = []
 
         for triplet_collection, n_triplets in N_triplets.items():
             collection_scene_ids = scene_ids_by_collection[triplet_collection]
@@ -104,8 +108,7 @@ class TripletSceneSplits(luigi.Task):
                 scene_ids = [scene_id_anchor, scene_id_distant]
 
                 for scene_id, is_distant in zip(scene_ids, [False, True]):
-                    scene_tiles = tiles_per_scene.setdefault(str(scene_id), [])
-                    scene_tiles.append(
+                    tiles_per_scene[scene_id].append(
                         dict(
                             triplet_id=n,
                             is_distant=is_distant,
