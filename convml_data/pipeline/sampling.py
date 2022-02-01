@@ -43,6 +43,11 @@ class SceneSourceFiles(luigi.Task):
 
         if self.input().exists():
             all_source_files = self.input().open()
+            if self.scene_id not in all_source_files:
+                raise Exception(
+                    f"Data for scene {self.scene_id} not found"
+                    + (self.aux_name is not None and f" for {self.aux_name}" or "")
+                )
             scene_source_files = all_source_files[self.scene_id]
             task = build_fetch_tasks(
                 scene_source_files=scene_source_files,
