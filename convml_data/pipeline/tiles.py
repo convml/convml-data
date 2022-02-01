@@ -249,20 +249,36 @@ class SceneTilesData(_SceneRectSampleBase):
 
             yield tile_identifier, tile_domain
 
+    def get_tile_collection_name(self, tile_meta):
+        if self.tiles_kind == "triplets":
+            tile_collection_name = tile_meta["triplet_collection"]
+        elif self.tiles_kind == "trajectories":
+            tile_collection_name = None
+        else:
+            raise NotImplementedError(self.tiles_kind)
+
+        return tile_collection_name
+
     def output(self):
         if not self.input()["tile_locations"].exists():
             return luigi.LocalTarget("__fakefile__.nc")
 
         tiles_meta = self.input()["tile_locations"].open()
 
-        tile_data_path = Path(self.data_path) / self.tiles_kind
+        tiles_data_path = Path(self.data_path) / self.tiles_kind
         if self.aux_name is not None:
-            tile_data_path /= self.aux_name
+            tiles_data_path /= self.aux_name
 
         outputs = {}
 
         for tile_meta in tiles_meta:
             tile_identifier = self.tile_identifier_format.format(**tile_meta)
+            tile_data_path = tiles_data_path
+
+            tile_collection = self.get_tile_collection_name(tile_meta)
+            if tile_collection is not None:
+                tile_data_path /= tile_collection
+
             fn_data = f"{tile_identifier}.nc"
             fn_image = f"{tile_identifier}.png"
             outputs[tile_identifier] = dict(
