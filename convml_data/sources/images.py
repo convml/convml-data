@@ -80,8 +80,8 @@ def make_rgb(da, alpha=0.5, invert_values=False, **coord_components):
     return da_rgba
 
 
-def rgb_image_from_scene_data(data_source, product, da_scene, **kwargs):
-    if data_source == "goes16":
+def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
+    if source_name == "goes16":
         if product == "truecolor_rgb" and "bands" in da_scene.coords:
             img_domain = goes16.satpy_rgb.rgb_da_to_img(da=da_scene)
         elif product.startswith("multichannel__") or product.startswith(

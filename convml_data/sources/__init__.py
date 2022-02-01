@@ -144,7 +144,7 @@ def extract_variable(task_input, data_source, product):
     return da
 
 
-def create_image(da, data_source, product):
+def create_image(da, source_name, product):
     return source_images.rgb_image_from_scene_data(
-        data_source=data_source, da_scene=da, product=product
+        source_name=source_name, da_scene=da, product=product
     )

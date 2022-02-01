@@ -119,7 +119,7 @@ class CropSceneSourceFiles(luigi.Task):
             # attrs again to ensure we get a proper RGB image
             da_cropped.attrs.update(da_full.attrs)
         img_cropped = create_image(
-            da=da_cropped, data_source=data_source.source, product=product
+            da=da_cropped, source_name=source_name, product=product
         )
 
         self.output_path.mkdir(exist_ok=True, parents=True)

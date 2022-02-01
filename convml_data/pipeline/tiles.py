@@ -224,7 +224,7 @@ class SceneTilesData(_SceneRectSampleBase):
             # if self.aux_name is not None:
             # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
             img_tile = create_source_image(
-                da=da_tile, data_source=source_name, product=product
+                da=da_tile, source_name=source_name, product=product
             )
             img_tile.save(str(tile_output["image"].fn))
 
