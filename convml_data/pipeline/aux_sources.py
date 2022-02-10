@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import isodate
 import luigi
 import numpy as np
 
@@ -16,12 +17,12 @@ from .scene_sources import (
 
 class CheckForAuxiliaryFiles(luigi.Task):
     """
-    Convenience task for downloading extra data for each scene.
+    Convenience task for downloading extra data for each scene and matching the
+    available data to the scenes of the primary datasource
     """
 
     data_path = luigi.Parameter(default=".")
     aux_name = luigi.Parameter()
-    DT_MAX_DEFAULT = np.timedelta64(10, "m")
 
     @property
     def data_source(self):
@@ -53,11 +54,17 @@ class CheckForAuxiliaryFiles(luigi.Task):
                 " group in meta.yaml"
             )
 
+        if "scene_mapping_strategy" not in product_meta:
+            product_meta["scene_mapping_strategy"] = "single_scene_per_aux_time"
+
         return product_meta
 
     @property
-    def dt_max(self):
-        return self.aux_product_meta.get("dt_max", self.DT_MAX_DEFAULT)
+    def dt_aux(self):
+        dt_aux = self.aux_product_meta.get("dt_aux", None)
+        if dt_aux is not None:
+            dt_aux = isodate.parse_duration(dt_aux)
+        return dt_aux
 
     @property
     def aux_source_name(self):
@@ -101,24 +108,13 @@ class CheckForAuxiliaryFiles(luigi.Task):
                 for (t, filename) in zip(aux_times, aux_product_filenames):
                     aux_scenes_by_time[t] = filename
 
-        # now match these aux scene times with the scene IDs we've already got
-        product_fn_for_scenes = {}
-        dt_min = np.timedelta64(365, "D")
-        for aux_time, aux_scene in aux_scenes_by_time.items():
-            dt_all = np.abs(scene_times - aux_time)
-            i = np.argmin(dt_all)
-            dt = dt_all[i]
-            if dt <= self.dt_max:
-                scene_id = scene_ids[i]
-                product_fn_for_scenes[scene_id] = aux_scene
-            if dt < dt_min:
-                dt_min = dt
-
-        if len(product_fn_for_scenes) == 0:
-            raise Exception(
-                f"No aux scenes found within the time-window `{self.dt_max}`"
-                f" dt_min=`{dt_min}`. Try changing `dt_max`"
-            )
+        product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
+            aux_scenes_by_time=aux_scenes_by_time,
+            scene_times=scene_times,
+            scene_ids=scene_ids,
+            dt_aux=self.dt_aux,
+            strategy=self.aux_product_meta["scene_mapping_strategy"],
+        )
 
         self.output().write(product_fn_for_scenes)
 
@@ -140,3 +136,69 @@ class CheckForAuxiliaryFiles(luigi.Task):
             )
 
         return output
+
+
+def _match_each_aux_time_to_scene_ids(
+    aux_scenes_by_time,
+    scene_times,
+    scene_ids,
+    strategy="single_scene_per_aux_time",
+    dt_aux=None,
+):
+    """
+    Match the aux source-file(s) to each of the primary scene IDs we've got,
+    using the time-spacing in aux source-file(s) `dt_aux` (if `dt_aux == None`
+    it will be calculated as the smallest time separation between aux
+    source-file(s))
+
+    Two strategies are implemented:
+
+    1) `single_scene_per_aux_time`: Each aux source will be matched to a single
+       scene id by selecting the closest scene id (in time). A limit on the
+       separation in time is set as half the time-spacing between the aux
+       sources `dt_aux/2`
+
+    2) `all_scenes_within_dt_aux`: All scene ids within `dt_aux/2` of the
+       time of one aux source-file(s) time are matched to the same aux
+       source-file(s)
+    """
+    aux_times = np.array(list(aux_scenes_by_time.keys()))
+    dt_aux_all = np.diff(aux_times)
+    # we take the minimum time here because there could be gaps in the aux data
+    # (if we've only downloaded data over time intervals)
+    dt_aux = np.min(dt_aux_all)
+    dt_max = dt_aux / 2
+
+    product_fn_for_scenes = {}
+
+    if strategy == "single_scene_per_aux_time":
+        # now match these aux scene times with the scene IDs we've already got
+        # by finding the closest scene each time
+        dt_min = np.timedelta64(365, "D")
+        for aux_time, aux_scene in aux_scenes_by_time.items():
+            dt_all = np.abs(scene_times - aux_time)
+            i = np.argmin(dt_all)
+            dt = dt_all[i]
+            if dt <= dt_max:
+                scene_id = scene_ids[i]
+                product_fn_for_scenes[scene_id] = aux_scene
+            if dt < dt_min:
+                dt_min = dt
+    elif strategy == "all_scenes_within_dt_aux":
+        for scene_time, scene_id in zip(scene_times, scene_ids):
+            dt_all = np.abs(aux_times - scene_time)
+            i = np.argmin(dt_all)
+            dt = dt_all[i]
+            if dt <= dt_max:
+                aux_time = aux_times[i]
+                product_fn_for_scenes[scene_id] = aux_scenes_by_time[aux_time]
+    else:
+        raise NotImplementedError(strategy)
+
+    if len(product_fn_for_scenes) == 0:
+        raise Exception(
+            "No aux scenes found within the inferred time-resolution of the "
+            f"aux data `{dt_aux}`"
+        )
+
+    return product_fn_for_scenes

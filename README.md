@@ -176,7 +176,18 @@ aux_products:
   cloud_top_height_ceres:
     source: ceres
     type: goes16n__cloud_top_height
+    scene_mapping_strategy: all_scenes_within_dt_aux
+    dt_aux: PT30M
 ```
+
+`scene_mapping_strategy` allows you to control how the times for which aux data
+is available is mapped to scenes of the primary data source. Currently the
+options implemented are `single_scene_per_aux_time` which ensures aux data is
+only used for one source scene ID and `all_scenes_within_dt_aux` which ensures
+all source scene IDs have a aux data associated (if the scene is within
+`dt_aux/2` of the aux scene). The default is `single_scene_per_aux_time`. If
+the aux source time resolution isn't provided (`dt_aux`) then it will be
+inferred as the smallest time span between any two aux source-files.
 
 To produce regridded data on the whole domain or for tiles the argument
 `--aux-name <aux_product_identifier>` can be added to the pipeline commands
