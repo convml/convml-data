@@ -209,9 +209,19 @@ class SceneTilesData(_SceneRectSampleBase):
             source_name = self.data_source.aux_products[self.aux_name]["source"]
             product = self.data_source.aux_products[self.aux_name]["type"]
 
+        tile_N = data_source.sampling[self.tiles_kind].get("tile_N")
+
         for tile_identifier, tile_domain in self.tile_domains:
             method = "nearest_s2d"
             da_tile = rc.resample(domain=tile_domain, da=da_src, dx=dx, method=method)
+            if tile_N is not None:
+                tile_shape = (int(da_tile.x.count()), int(da_tile.y.count()))
+                if tile_shape[0] != tile_N or tile_shape[1] != tile_N:
+                    raise Exception(
+                        "Regridder returned a tile with incorrect shape "
+                        f"({tile_N}, {tile_N}) != {tile_shape}"
+                    )
+
             tile_output = self.output()[tile_identifier]
             Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
             tile_output["data"].write(da_tile)
