@@ -9,6 +9,20 @@ from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .les import FindLESFiles, LESDataFile
 
 
+def parse_goes16_product_shorthand(product):
+    channel_names = product.split("__")[1:]
+    channels = dict()
+    for channel_name in channel_names:
+        if "_" not in channel_name:
+            channel_number = int(channel_name)
+            channels[channel_number] = None
+        else:
+            channel_prefix, channel_number = channel_name.split("_")
+            channel_number = int(channel_number)
+            channels[channel_number] = channel_prefix
+    return channels
+
+
 def build_query_tasks(source_name, source_type, time_intervals, source_data_path):
     """return collection of luigi.Task objects that will query a data source"""
     if source_name == "goes16":
@@ -17,6 +31,8 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
         elif source_type.startswith("multichannel__"):
             _, channels_str = source_type.split("__")
             channels = [int(v) for v in channels_str.split("_")]
+        elif source_type.startswith("singlechannel__"):
+            channels = list(parse_goes16_product_shorthand(source_type).keys())
         else:
             raise NotImplementedError(source_type)
 
@@ -33,6 +49,10 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
                     channel=channel,
                 )
                 tasks.setdefault(channel, []).append(t)
+
+        if len(channels) == 1:
+            tasks = tasks[channels[0]]
+
     elif source_name == "LES":
         kind, *variables = source_type.split("__")
 
@@ -120,18 +140,43 @@ def extract_variable(task_input, data_source, product):
             )
         elif product.startswith("multichannel__"):
             das = []
+            channels = parse_goes16_product_shorthand(product)
             for task_channel in task_input:
                 path = task_channel.path
                 file_meta = GOES16Query.parse_filename(filename=path)
                 channel_number = file_meta["channel"]
+
+                derived_variable = None
+                if channels[channel_number] == "bt":
+                    derived_variable = "brightness_temperature"
+                elif channels[channel_number] is not None:
+                    raise NotImplementedError(channels[channel_number])
+
                 da = goes16.satpy_rgb.load_radiance_channel(
-                    scene_fn=path, channel_number=channel_number
+                    scene_fn=path,
+                    channel_number=channel_number,
+                    derived_variable=derived_variable,
                 )
                 da["channel"] = channel_number
                 das.append(da)
             # TODO: may need to do some regridding here if we try to stack
             # channels with different spatial resolution
             da = xr.concat(das, dim="channel")
+        elif product.startswith("singlechannel__"):
+            channels = parse_goes16_product_shorthand(product)
+            assert len(channels) == 1
+            channel_number = list(channels.keys())[0]
+            derived_variable = None
+            if channels[channel_number] == "bt":
+                derived_variable = "brightness_temperature"
+            elif channels[channel_number] is not None:
+                raise NotImplementedError(channels[channel_number])
+
+            da = goes16.satpy_rgb.load_radiance_channel(
+                scene_fn=task_input[0].path,
+                derived_variable=derived_variable,
+                channel_number=channel_number,
+            )
         else:
             da = goes16.satpy_rgb.load_aux_file(scene_fn=task_input)
     elif data_source == "LES":

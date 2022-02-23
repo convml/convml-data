@@ -102,15 +102,25 @@ def load_aux_file(scene_fn):
     return da
 
 
-def load_radiance_channel(scene_fn, channel_number):
+def load_radiance_channel(scene_fn, channel_number, derived_variable=None):
+    """
+    satpy has implemented functionality to convert for example from radiance to
+    brightness temperature, which can be selected by defining
+    `derived_variable` (e.g. `brightness_temperature`)
+    """
     # for radiance channel fields we simply open so we can crop them
     # but we need to pick out the right variable in the dataset
 
     var_name = f"C{channel_number:02d}"
     ds = xr.open_dataset(scene_fn)
 
+    if derived_variable is None:
+        calibration = "*"
+    else:
+        calibration = derived_variable
+
     scene = satpy.Scene(reader="abi_l1b", filenames=[scene_fn])
-    scene.load([var_name])
+    scene.load([var_name], calibration=calibration)
 
     da = scene[var_name]
     if "crs" in da.coords:
