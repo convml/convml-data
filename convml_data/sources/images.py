@@ -106,7 +106,7 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
                 # creating RGB images from them
                 da_rgba = make_rgb(da_scene, channel=channels, invert_values=True)
                 da_rgba.plot.imshow(ax=ax, rgb="rgba", y="y", add_colorbar=False)
-            elif product.startswith("singlechanel__"):
+            elif product.startswith("singlechannel__"):
                 da_scene.plot(ax=ax, cmap="nipy_spectral", y="y", add_colorbar=False)
             else:
                 raise NotImplementedError(product)
