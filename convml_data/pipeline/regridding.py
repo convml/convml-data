@@ -51,17 +51,17 @@ class SceneRegriddedData(_SceneRectSampleBase):
             reqs["source_data"] = SceneSourceFiles(
                 scene_id=self.scene_id,
                 data_path=self.data_path,
-                aux_product=self.aux_product,
+                aux_name=self.aux_name,
             )
         else:
             reqs["source_data"] = CropSceneSourceFiles(
                 scene_id=self.scene_id,
                 data_path=self.data_path,
                 pad_ptc=self.crop_pad_ptc,
-                aux_product=self.aux_product,
+                aux_name=self.aux_name,
             )
 
-        if self.aux_product is not None:
+        if self.aux_name is not None:
             reqs["base"] = SceneRegriddedData(
                 scene_id=self.scene_id,
                 data_path=self.data_path,
@@ -99,7 +99,7 @@ class SceneRegriddedData(_SceneRectSampleBase):
 
             dx = self.scene_resolution
 
-            if self.aux_product is None:
+            if self.aux_name is None:
                 method = "bilinear"
             else:
                 method = "nearest_s2d"
@@ -109,7 +109,7 @@ class SceneRegriddedData(_SceneRectSampleBase):
         else:
             da_domain = domain_output["data"].open()
 
-        if self.aux_product is not None:
+        if self.aux_name is not None:
             img_domain = self.input()["base"]["image"].open()
             fig, _ = _plot_scene_aux(da_aux=da_domain, img=img_domain)
             fig.savefig(domain_output["image"].fn)
@@ -125,8 +125,8 @@ class SceneRegriddedData(_SceneRectSampleBase):
     def output(self):
         scene_data_path = Path(self.data_path) / "rect"
 
-        if self.aux_product is not None:
-            scene_data_path = scene_data_path / "aux" / self.aux_product
+        if self.aux_name is not None:
+            scene_data_path = scene_data_path / "aux" / self.aux_name
 
         fn_data = f"{self.scene_id}.nc"
         fn_image = f"{self.scene_id}.png"
@@ -140,13 +140,13 @@ class GenerateRegriddedScenes(SceneBulkProcessingBaseTask):
     data_path = luigi.Parameter(default=".")
     TaskClass = SceneRegriddedData
 
-    aux_product = luigi.OptionalParameter(default=None)
+    aux_name = luigi.OptionalParameter(default=None)
 
     def _get_task_class_kwargs(self, scene_ids):
-        if self.aux_product is None:
+        if self.aux_name is None:
             return {}
 
-        return dict(aux_product=self.aux_product)
+        return dict(aux_name=self.aux_name)
 
     def requires(self):
         if self.TaskClass is None:
@@ -154,7 +154,7 @@ class GenerateRegriddedScenes(SceneBulkProcessingBaseTask):
                 "Please set TaskClass to the type you would like"
                 " to process for every scene"
             )
-        if self.aux_product is None:
+        if self.aux_name is None:
             TaskClass = GenerateSceneIDs
         else:
             TaskClass = CheckForAuxiliaryFiles
@@ -162,7 +162,7 @@ class GenerateRegriddedScenes(SceneBulkProcessingBaseTask):
         return TaskClass(data_path=self.data_path, **self._get_scene_ids_task_kwargs())
 
     def _get_scene_ids_task_kwargs(self):
-        if self.aux_product is None:
+        if self.aux_name is None:
             return {}
 
-        return dict(product_name=self.aux_product)
+        return dict(aux_name=self.aux_name)
