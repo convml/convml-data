@@ -48,6 +48,15 @@ GOES-16 data from Amazon S3 and with `type==truecolor_rgb` will generate
 truecolor RGB composites from the first three radiance channels. has been
 implemented.
 
+In addition to the `truecolor_rgb` type there are three other sets of source
+types that can be defined. `multichannel` and `singlechannel` make it possible
+to either combine multiple radiance channels or a single channel, for example
+as `multichannel__10__11__12` to use channels 10, 11 and 12. And
+`singlechannel__10` will simply fetch channel 10. You can optionally prefix the
+channel number by `bt` to convert radiances to brightness temperature, e.g.
+`singlechannel__bt13` will use channel 13 converted from radiances to
+brightness temperature
+
 ### `LES` data source
 
 ```yaml
