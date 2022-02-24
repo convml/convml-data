@@ -5,6 +5,21 @@
 
 [Full Changelog](https://github.com/convml/convml-data/compare/v0.1.0...HEAD)
 
+*new features*
+
+- Add option for using GOES-16 brightness temperature rather than radiance
+  observations
+  [\#16](https://github.com/convml/convml-data/pull/16)
+  ([leifdenby](https://github.com/leifdenby))
+
+
+*maintenance*
+
+- Fixes for aux variables missed during splitting `convml-data` code from
+  `convml_tt`
+  [\#15](https://github.com/convml/convml-data/pull/15)
+  ([leifdenby](https://github.com/leifdenby))
+
 - Pin `satdata` package to version released on pypi. This is necessary to be
   able to put `convml-data` on pypi
   [\#14](https://github.com/convml/convml-data/pull/14)
