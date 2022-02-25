@@ -298,6 +298,55 @@ class SceneTilesData(_SceneRectSampleBase):
         return outputs
 
 
+class CreateTilesMeta(luigi.Task):
+    """
+    Generate meta info for all tiles across all scenes. This task is only
+    implemented for convenience. To actually generate the tile data for all
+    scenes you should use the `GenerateTiles` task
+    """
+
+    data_path = luigi.Parameter(default=".")
+    tiles_kind = luigi.Parameter()
+
+    @property
+    def data_source(self):
+        return DataSource.load(path=self.data_path)
+
+    def requires(self):
+        tasks = {}
+        if self.tiles_kind == "triplets":
+            tasks["tiles_per_scene"] = triplets.TripletSceneSplits(
+                data_path=self.data_path
+            )
+        elif self.tiles_kind == "trajectories":
+            tasks["tiles_per_scene"] = trajectory_tiles.TilesPerScene(
+                data_path=self.data_path
+            )
+        else:
+            raise NotImplementedError(self.tiles_kind)
+
+        return tasks
+
+    def run(self):
+        tiles_per_scene = self.input()["tiles_per_scene"].open()
+        if "scene_ids" in self.input():
+            scene_ids = list(self.input()["scene_ids"].open().keys())
+        else:
+            scene_ids = list(tiles_per_scene.keys())
+
+        tasks_tiles = {}
+        for scene_id in scene_ids:
+            tiles_meta = tiles_per_scene[scene_id]
+            if len(tiles_meta) > 0:
+                tasks_tiles[scene_id] = SceneTileLocations(
+                    data_path=self.data_path,
+                    scene_id=scene_id,
+                    tiles_kind=self.tiles_kind,
+                )
+
+        yield tasks_tiles
+
+
 class GenerateTiles(luigi.Task):
     """
     Generate all tiles across all scenes. First which tiles to generate per
