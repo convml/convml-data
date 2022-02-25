@@ -12,6 +12,9 @@
   [\#16](https://github.com/convml/convml-data/pull/16)
   ([leifdenby](https://github.com/leifdenby))
 
+- add convenience pipeline task for generating meta info for all tiles
+  [\#17](https://github.com/convml/convml-data/pull/17)
+
 
 *maintenance*
 
