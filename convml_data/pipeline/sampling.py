@@ -89,6 +89,10 @@ class CropSceneSourceFiles(luigi.Task):
             )
         )
 
+    @property
+    def domain(self):
+        return self.data_source.domain
+
     def run(self):
         data_source = self.data_source
 
@@ -105,10 +109,7 @@ class CropSceneSourceFiles(luigi.Task):
             product=product,
         )
 
-        domain = data_source.domain
-        # if isinstance(domain, rc.LocalCartesianDomain):
-        # domain.validate_dataset(da_full)
-
+        domain = self.domain
         da_cropped = rc.crop_field_to_domain(
             domain=domain, da=da_full, pad_pct=self.pad_ptc
         )

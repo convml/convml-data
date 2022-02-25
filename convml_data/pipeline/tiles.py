@@ -132,7 +132,7 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
         datasource = DataSource.load(path=self.data_path)
         sampling_meta = datasource.sampling
         dx = datasource.sampling["resolution"]
-        tile_N = sampling_meta["trajectories"]["tile_N"]
+        tile_N = sampling_meta[self.tiles_kind]["tile_N"]
         tile_size = dx * tile_N
 
         domain = rc.LocalCartesianDomain(
@@ -221,6 +221,10 @@ class SceneTilesData(_SceneRectSampleBase):
                         "Regridder returned a tile with incorrect shape "
                         f"({tile_N}, {tile_N}) != {tile_shape}"
                     )
+
+            if self.aux_name is not None:
+                da_tile.name = self.aux_name
+                da_tile.attrs.update(da_src.attrs)
 
             tile_output = self.output()[tile_identifier]
             Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
