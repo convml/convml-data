@@ -234,8 +234,11 @@ class TrajectoriesSpanningDomain(LatLonPointsSpanningDomain):
         da_lat = self.ds.lat
         super().__init__(da_lat=da_lat, da_lon=da_lon, padding=padding)
 
-    def plot_trajectories(self, ax=None):
+    def plot_trajectories(self, ax=None, ds_traj=None, **kwargs):
         if ax is None:
             ax = self.plot_outline()
 
-        ax.plot(self.ds.lon, self.ds.lat, transform=ccrs.PlateCarree())
+        if ds_traj is None:
+            ds_traj = self.ds
+
+        return ax.plot(ds_traj.lon, ds_traj.lat, transform=ccrs.PlateCarree(), **kwargs)

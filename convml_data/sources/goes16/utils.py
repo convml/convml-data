@@ -53,3 +53,17 @@ def create_true_color_img(das_channels):
     arr = channels_to_rgb([da.values / 256.0 for da in das_channels])
     img_data = (arr * 255).astype(np.uint8)
     return Image.fromarray(img_data)
+
+
+def parse_product_shorthand(product):
+    channel_names = product.split("__")[1:]
+    channels = dict()
+    for channel_name in channel_names:
+        if "_" not in channel_name:
+            channel_number = int(channel_name)
+            channels[channel_number] = None
+        else:
+            channel_prefix, channel_number = channel_name.split("_")
+            channel_number = int(channel_number)
+            channels[channel_number] = channel_prefix
+    return channels

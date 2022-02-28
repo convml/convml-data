@@ -9,20 +9,6 @@ from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .les import FindLESFiles, LESDataFile
 
 
-def parse_goes16_product_shorthand(product):
-    channel_names = product.split("__")[1:]
-    channels = dict()
-    for channel_name in channel_names:
-        if "_" not in channel_name:
-            channel_number = int(channel_name)
-            channels[channel_number] = None
-        else:
-            channel_prefix, channel_number = channel_name.split("_")
-            channel_number = int(channel_number)
-            channels[channel_number] = channel_prefix
-    return channels
-
-
 def build_query_tasks(source_name, source_type, time_intervals, source_data_path):
     """return collection of luigi.Task objects that will query a data source"""
     if source_name == "goes16":
@@ -32,7 +18,7 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
             _, channels_str = source_type.split("__")
             channels = [int(v) for v in channels_str.split("_")]
         elif source_type.startswith("singlechannel__"):
-            channels = list(parse_goes16_product_shorthand(source_type).keys())
+            channels = list(goes16.parse_product_shorthand(source_type).keys())
         else:
             raise NotImplementedError(source_type)
 
@@ -140,7 +126,7 @@ def extract_variable(task_input, data_source, product):
             )
         elif product.startswith("multichannel__"):
             das = []
-            channels = parse_goes16_product_shorthand(product)
+            channels = goes16.parse_product_shorthand(product)
             for task_channel in task_input:
                 path = task_channel.path
                 file_meta = GOES16Query.parse_filename(filename=path)
@@ -163,7 +149,7 @@ def extract_variable(task_input, data_source, product):
             # channels with different spatial resolution
             da = xr.concat(das, dim="channel")
         elif product.startswith("singlechannel__"):
-            channels = parse_goes16_product_shorthand(product)
+            channels = goes16.parse_product_shorthand(product)
             assert len(channels) == 1
             channel_number = list(channels.keys())[0]
             derived_variable = None

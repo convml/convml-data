@@ -15,6 +15,12 @@
 
 *maintenance*
 
+- Fixes for tile generation pipeline, ensuring that domains are cropped to
+  only-just contain tiles (rather than using larger sampling domain), copy
+  source-data meta attributes to tiles and make tile-image generation work for
+  tiles that are constructed from brightness temperature
+  [\#18](https://github.com/convml/convml-data/pull/18)
+
 - Fixes for aux variables missed during splitting `convml-data` code from
   `convml_tt`
   [\#15](https://github.com/convml/convml-data/pull/15)

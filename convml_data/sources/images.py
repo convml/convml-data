@@ -43,7 +43,8 @@ def make_rgb(da, alpha=0.5, invert_values=False, **coord_components):
 
     if len(dim_idxs) != 3:
         raise Exception(
-            f"You should provide exactly three indexes of the `{v_dim}` coordinate to turn into RGB"
+            f"You should provide exactly three indexes of the `{v_dim}` coordinate to turn into RGB."
+            f"{coord_components} was supplied"
         )
     elif v_dim not in da.dims:
         raise Exception(f"The `{v_dim}` coordinate wasn't found the provided DataArray")
@@ -101,7 +102,7 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
             ax.set_position([0.0, 0.0, 1.0, 1.0])
 
             if product.startswith("multichannel__"):
-                channels = [int(v) for v in product.split("__")[1].split("_")]
+                channels = list(goes16.parse_product_shorthand(product).keys())
                 # TODO: for now we will invert the Radiance channel values when
                 # creating RGB images from them
                 da_rgba = make_rgb(da_scene, channel=channels, invert_values=True)
