@@ -7,7 +7,7 @@ import xarray as xr
 from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..sources import create_image as create_source_image
-from ..utils.luigi import DBTarget, XArrayTarget
+from ..utils.luigi import DBTarget, XArrayTarget, YAMLTarget
 from . import trajectory_tiles, triplets
 from .aux_sources import CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
@@ -211,7 +211,7 @@ class SceneTilesData(_SceneRectSampleBase):
 
         tile_N = data_source.sampling[self.tiles_kind].get("tile_N")
 
-        for tile_identifier, tile_domain in self.tile_domains:
+        for tile_identifier, tile_domain, tile_meta in self.tile_domains:
             method = "nearest_s2d"
             da_tile = rc.resample(domain=tile_domain, da=da_src, dx=dx, method=method)
             if tile_N is not None:
@@ -242,6 +242,11 @@ class SceneTilesData(_SceneRectSampleBase):
             )
             img_tile.save(str(tile_output["image"].fn))
 
+            tile_meta["scene_id"] = self.scene_id
+            if self.aux_name is not None:
+                tile_meta["aux_name"] = self.aux_name
+            tile_output["meta"].write(tile_meta)
+
     @property
     def tile_identifier_format(self):
         if self.tiles_kind == "triplets":
@@ -261,7 +266,7 @@ class SceneTilesData(_SceneRectSampleBase):
             tile_domain = rc.deserialise_domain(tile_meta["loc"])
             tile_identifier = self.tile_identifier_format.format(**tile_meta)
 
-            yield tile_identifier, tile_domain
+            yield tile_identifier, tile_domain, tile_meta
 
     def get_tile_collection_name(self, tile_meta):
         if self.tiles_kind == "triplets":
@@ -295,9 +300,11 @@ class SceneTilesData(_SceneRectSampleBase):
 
             fn_data = f"{tile_identifier}.nc"
             fn_image = f"{tile_identifier}.png"
+            fn_meta = f"{tile_identifier}.yml"
             outputs[tile_identifier] = dict(
                 data=XArrayTarget(str(tile_data_path / fn_data)),
                 image=luigi.LocalTarget(str(tile_data_path / fn_image)),
+                meta=YAMLTarget(path=str(tile_data_path / fn_meta)),
             )
         return outputs
 
@@ -381,7 +388,7 @@ class GenerateTiles(luigi.Task):
             raise NotImplementedError(self.tiles_kind)
 
         if self.aux_name is not None:
-            tasks["scene_ids"] = CheckForAuxiliaryFiles(
+            tasks["aux_scenes"] = CheckForAuxiliaryFiles(
                 data_path=self.data_path, aux_name=self.aux_name
             )
 
@@ -389,19 +396,25 @@ class GenerateTiles(luigi.Task):
 
     def run(self):
         tiles_per_scene = self.input()["tiles_per_scene"].open()
-        if "scene_ids" in self.input():
-            scene_ids = list(self.input()["scene_ids"].open().keys())
-        else:
-            scene_ids = list(tiles_per_scene.keys())
+        scene_ids = list(tiles_per_scene.keys())
+
+        # exclude scene ids without a tile
+        scene_ids = [
+            scene_id for scene_id in scene_ids if len(tiles_per_scene[scene_id]) > 0
+        ]
+
+        if "aux_scenes" in self.input():
+            aux_scene_ids = list(self.input()["aux_scenes"].open().keys())
+            scene_ids = [
+                scene_id for scene_id in scene_ids if scene_id in aux_scene_ids
+            ]
 
         tasks_tiles = {}
         for scene_id in scene_ids:
-            tiles_meta = tiles_per_scene[scene_id]
-            if len(tiles_meta) > 0:
-                tasks_tiles[scene_id] = SceneTilesData(
-                    scene_id=scene_id,
-                    tiles_kind=self.tiles_kind,
-                    aux_name=self.aux_name,
-                )
+            tasks_tiles[scene_id] = SceneTilesData(
+                scene_id=scene_id,
+                tiles_kind=self.tiles_kind,
+                aux_name=self.aux_name,
+            )
 
         yield tasks_tiles
