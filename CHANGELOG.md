@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [Unreleased](https://github.com/convml/convml-data/tree/HEAD)
+
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.0...)
+
+*bugfixes*
+
+- Fix issue where triplet tiles generated with multiple workers in parallel
+  sometimes were at repeated locations, i.e. some tiles were exactly at the
+  same locations [\#19](https://github.com/convml/convml-data/pull/19)
+
+
 ## [v0.2.0](https://github.com/convml/convml-data/tree/v0.2.0)
 
 [Full Changelog](https://github.com/convml/convml-data/compare/v0.1.0...v0.2.0)
