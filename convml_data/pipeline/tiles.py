@@ -79,8 +79,11 @@ class SceneTileLocations(luigi.Task):
                 if isinstance(domain, sampling_domain.SourceDataDomain):
                     ds_scene = self.input()["scene_source_data"].open()
                     domain = domain.generate_from_dataset(ds=ds_scene)
+
                 tile_locations = triplets.sample_triplet_tile_locations(
-                    tiles_meta=tiles_meta, domain=domain, data_source=self.data_source
+                    tiles_meta=tiles_meta,
+                    domain=domain,
+                    data_source=self.data_source,
                 )
             elif self.tiles_kind == "trajectories":
                 tile_locations = tiles_meta
