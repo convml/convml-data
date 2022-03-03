@@ -5,7 +5,7 @@ from scipy.constants import pi
 from ..sampling import CartesianSquareTileDomain
 
 
-def generate_randomly_located_tile(domain, tile_size):
+def generate_randomly_located_tile(domain, tile_size, rng=None):
     """
     Generate a tile domain of a specific `tile_siez` that fits inside `domain`
     """
@@ -17,8 +17,11 @@ def generate_randomly_located_tile(domain, tile_size):
     d_ymin = np.min(domain_bounds[..., 1]) + tile_size / 2.0
     d_ymax = np.max(domain_bounds[..., 1]) - tile_size / 2.0
 
-    x_t = d_xmin + (d_xmax - d_xmin) * np.random.random()
-    y_t = d_ymin + (d_ymax - d_ymin) * np.random.random()
+    if rng is None:
+        rng = np.random.default_rng(rng)
+
+    x_t = d_xmin + (d_xmax - d_xmin) * rng.uniform()
+    y_t = d_ymin + (d_ymax - d_ymin) * rng.uniform()
 
     tile_domain = CartesianSquareTileDomain(x_c=x_t, y_c=y_t, size=tile_size)
     if isinstance(domain, LocalCartesianDomain):
@@ -41,14 +44,17 @@ def generate_randomly_located_tile(domain, tile_size):
 
 
 def generate_tile_domain_with_peturbed_location(
-    domain, tile_domain, tile_size, distance_size_scaling
+    domain, tile_domain, tile_size, distance_size_scaling, rng=None
 ):
     """
     Generate a tile of a specific `tile_size` that fits inside `domain`
     """
     domain_bounds_geometry = domain.spatial_bounds_geometry
 
-    theta = 2 * pi * np.random.random()
+    if rng is None:
+        rng = np.random.default_rng(rng)
+
+    theta = 2 * pi * rng.uniform()
     r = distance_size_scaling * tile_size
     dlx = r * np.cos(theta)
     dly = r * np.sin(theta)
@@ -70,21 +76,17 @@ def generate_tile_domain_with_peturbed_location(
             tile_domain=tile_domain,
             tile_size=tile_size,
             distance_size_scaling=distance_size_scaling,
+            rng=rng,
         )
 
 
-def generate_triplet_location(
-    domain,
-    tile_size,
-    neigh_dist_scaling=1.0,
-):
+def generate_triplet_location(domain, tile_size, neigh_dist_scaling=1.0, rng=None):
     """
     Generate a set of (x,y)-positions (a list of three specifically)
     representing the "anchor", "neighbor" and "distant" tile locations
     """
-
     anchor_tile_domain = generate_randomly_located_tile(
-        domain=domain, tile_size=tile_size
+        domain=domain, tile_size=tile_size, rng=rng
     )
 
     neighbor_tile_domain = generate_tile_domain_with_peturbed_location(
@@ -92,9 +94,10 @@ def generate_triplet_location(
         tile_domain=anchor_tile_domain,
         tile_size=tile_size,
         distance_size_scaling=neigh_dist_scaling,
+        rng=rng,
     )
     distant_tile_domain = generate_randomly_located_tile(
-        domain=domain, tile_size=tile_size
+        domain=domain, tile_size=tile_size, rng=rng
     )
 
     return [anchor_tile_domain, neighbor_tile_domain, distant_tile_domain]
