@@ -8,7 +8,7 @@ from pathlib import Path
 import luigi
 
 from .. import DataSource
-from ..sources import build_query_tasks, get_time_for_filename
+from ..sources import build_query_tasks, get_time_for_filename, goes16
 from ..utils.luigi import DBTarget
 
 log = logging.getLogger()
@@ -64,7 +64,7 @@ def create_scenes_from_multichannel_queries(inputs, source_name, product):
     if product == "truecolor_rgb":
         channel_order = [1, 2, 3]
     elif product.startswith("multichannel__"):
-        channel_order = [int(v) for v in product.split("__")[1].split("_")]
+        channel_order = list(goes16.parse_product_shorthand(product).keys())
     else:
         raise NotImplementedError(product)
 

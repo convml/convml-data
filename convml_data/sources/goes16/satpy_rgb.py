@@ -115,7 +115,7 @@ def load_radiance_channel(scene_fn, channel_number, derived_variable=None):
     ds = xr.open_dataset(scene_fn)
 
     if derived_variable is None:
-        calibration = "*"
+        calibration = "radiance"
     else:
         calibration = derived_variable
 
