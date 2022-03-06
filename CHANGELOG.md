@@ -7,6 +7,10 @@
 
 *bugfixes*
 
+- Fix issue where satpy would return brightness temperature for some channels
+  but radiance for others for GOES-16 data. Always use radiance by default from
+  now on. [\#20](https://github.com/convml/convml-data/pull/20)
+
 - Fix issue where triplet tiles generated with multiple workers in parallel
   sometimes were at repeated locations, i.e. some tiles were exactly at the
   same locations [\#19](https://github.com/convml/convml-data/pull/19)
