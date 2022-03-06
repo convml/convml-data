@@ -1,9 +1,9 @@
 # Changelog
 
 
-## [Unreleased](https://github.com/convml/convml-data/tree/HEAD)
+## [v0.2.1](https://github.com/convml/convml-data/tree/v0.2.1)
 
-[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.0...)
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.0...v0.2.1)
 
 *bugfixes*
 
