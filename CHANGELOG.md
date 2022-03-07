@@ -10,6 +10,13 @@
   missing so that we don't request these files.
   [\#21](https://github.com/convml/convml-data/pull/21)
 
+*bugfixes*
+
+- Fix creation of tile images from "multichannel" sources that arose from using
+  `matplotlib` to create the tile image, now images are created directly using
+  `PIL`.
+  [\#22](https://github.com/convml/convml-data/pull/22)
+
 
 ## [v0.2.1](https://github.com/convml/convml-data/tree/v0.2.1)
 
