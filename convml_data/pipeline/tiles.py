@@ -218,11 +218,11 @@ class SceneTilesData(_SceneRectSampleBase):
             method = "nearest_s2d"
             da_tile = rc.resample(domain=tile_domain, da=da_src, dx=dx, method=method)
             if tile_N is not None:
-                tile_shape = (int(da_tile.x.count()), int(da_tile.y.count()))
-                if tile_shape[0] != tile_N or tile_shape[1] != tile_N:
+                img_shape = (int(da_tile.x.count()), int(da_tile.y.count()))
+                if img_shape[0] != tile_N or img_shape[1] != tile_N:
                     raise Exception(
                         "Regridder returned a tile with incorrect shape "
-                        f"({tile_N}, {tile_N}) != {tile_shape}"
+                        f"({tile_N}, {tile_N}) != {img_shape}"
                     )
 
             if self.aux_name is not None:
@@ -243,6 +243,13 @@ class SceneTilesData(_SceneRectSampleBase):
             img_tile = create_source_image(
                 da=da_tile, source_name=source_name, product=product
             )
+            if tile_N is not None:
+                img_shape = img_tile.size
+                if img_shape[0] != tile_N or img_shape[1] != tile_N:
+                    raise Exception(
+                        "Produced image has incorrect shape "
+                        f"({tile_N}, {tile_N}) != {img_shape}"
+                    )
             img_tile.save(str(tile_output["image"].fn))
 
             tile_meta["scene_id"] = self.scene_id

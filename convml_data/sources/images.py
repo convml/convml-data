@@ -1,31 +1,11 @@
 """
 Utilities for creating a images representing the scene source data
 """
-import io
-
-import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from PIL import Image
 
 from ..sources import goes16
-
-
-def save_ax_nosave(ax, **kwargs):
-    """
-    Create an Image object from the content of a matplotlib.Axes which can be saved to a PNG-file
-
-    source: https://stackoverflow.com/a/43099136/271776
-    """
-    ax.axis("off")
-    ax.figure.canvas.draw()
-    trans = ax.figure.dpi_scale_trans.inverted()
-    bbox = ax.bbox.transformed(trans)
-    buff = io.BytesIO()
-    ax.figure.savefig(buff, format="png", dpi=ax.figure.dpi, bbox_inches=bbox, **kwargs)
-    ax.axis("on")
-    buff.seek(0)
-    return Image.open(buff)
 
 
 def make_rgb(da, alpha=0.5, invert_values=False, **coord_components):
@@ -88,31 +68,22 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
         elif product.startswith("multichannel__") or product.startswith(
             "singlechannel__"
         ):
-            dpi = 100.0
-            ny = int(da_scene.y.count())
-            height = ny / dpi
-
-            lx, ly = (
-                da_scene.x.max() - da_scene.x.min(),
-                da_scene.y.max() - da_scene.y.min(),
-            )
-            width = height / ly * lx
-            fig, ax = plt.subplots(figsize=(width, height))
-            ax.set_aspect(1.0)
-            ax.set_position([0.0, 0.0, 1.0, 1.0])
-
             if product.startswith("multichannel__"):
                 channels = list(goes16.parse_product_shorthand(product).keys())
                 # TODO: for now we will invert the Radiance channel values when
                 # creating RGB images from them
                 da_rgba = make_rgb(da_scene, channel=channels, invert_values=True)
-                da_rgba.plot.imshow(ax=ax, rgb="rgba", y="y", add_colorbar=False)
             elif product.startswith("singlechannel__"):
-                da_scene.plot(ax=ax, cmap="nipy_spectral", y="y", add_colorbar=False)
+                raise NotImplementedError(product)
             else:
                 raise NotImplementedError(product)
 
-            img_domain = save_ax_nosave(ax=ax)
+            # PIL assumes image shape (w, h, channels) and requires unsigned
+            # 8bit ints
+            rgba_values = (
+                (255.0 * da_rgba.transpose("x", "y", "rgba")).astype(np.uint8).values
+            )
+            img_domain = Image.fromarray(rgba_values)
         else:
             raise NotImplementedError(product)
     else:
