@@ -244,7 +244,14 @@ class SceneTilesData(_SceneRectSampleBase):
                 da=da_tile, source_name=source_name, product=product
             )
             if tile_N is not None:
-                img_shape = img_tile.size
+                if hasattr(img_tile, "size"):
+                    img_shape = img_tile.size
+                else:
+                    # trollimage.xrimage.XRImage doesn't have a `.size`
+                    # attribute like PIL.Image does, but it does have `.data`
+                    # which has a shape
+                    _, *image_shape = img_tile.data.shape
+
                 if img_shape[0] != tile_N or img_shape[1] != tile_N:
                     raise Exception(
                         "Produced image has incorrect shape "
