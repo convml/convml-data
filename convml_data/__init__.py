@@ -234,54 +234,55 @@ class DataSource:
         if time_meta is None:
             return times
 
-        filters = time_meta.get("filters", {})
-
         # first we add our own filter which always has to be satisfied: the
         # values fit within the selected time intervals
         def _within_time_intervals(t):
             found_valid_interval = False
             for t_start, t_end in self.time_intervals:
-                if np.datetime64(t_start) <= t and t <= np.datetime64(t_end):
+                if np.datetime64(t_start) <= t <= np.datetime64(t_end):
                     found_valid_interval = True
 
             return found_valid_interval
 
-        filter_fns = []
-        filter_fns.append(_within_time_intervals)
+        times = list(filter(_within_time_intervals, times))
 
-        map_scene_times_to_trajectory_times = False
-        for filter_kind, filter_value in filters.items():
-            filter_fn = None
+        # second we apply any global filters
+        global_filters = time_meta.get("filters", {})
+
+        for filter_kind, filter_value in global_filters.items():
             if filter_kind == "N_hours_from_zenith":
-                lon_zenith = self.domain.central_longitude
-                filter_fn = functools.partial(
-                    time_filters.within_dt_from_zenith,
-                    dt_zenith_max=datetime.timedelta(hours=filter_value),
-                    lon_zenith=lon_zenith,
-                )
-            elif filter_kind == time_filters.DATETIME_ATTRS:
-                filter_fn = functools.partial(
-                    time_filters.within_attr_values, **{filter_kind: filter_value}
-                )
+                times = [
+                    t
+                    for t in times
+                    if time_filters.within_dt_from_zenith(
+                        time=t,
+                        dt_zenith_max=datetime.timedelta(hours=filter_value),
+                        lon_zenith=self.domain.central_longitude,
+                    )
+                ]
+
+            elif filter_kind in time_filters.DATETIME_ATTRS:
+                times = [
+                    t
+                    for t in times
+                    if time_filters.within_attr_values(
+                        time=t, **{filter_kind: filter_value}
+                    )
+                ]
             elif filter_kind == "using_trajectory_sampling" and filter_value is True:
-                map_scene_times_to_trajectory_times = True
+                ds_trajectories = load_trajectories(self._meta)
+                da_source_times = ds_trajectories.time
+                valid_times = []
+                for t in da_source_times.values:
+                    t_nearest = find_nearest_time(t=t, times=times)
+                    valid_times.append(t_nearest)
+                times = list(set(valid_times))
             else:
-                raise NotImplementedError(filter_kind)
-
-            if filter_fn is not None:
-                filter_fns.append(filter_fn)
-
-        if map_scene_times_to_trajectory_times:
-            ds_trajectories = load_trajectories(self._meta)
-            da_source_times = ds_trajectories.time
-            valid_times = []
-            for t in da_source_times.values:
-                t_nearest = find_nearest_time(t=t, times=times)
-                valid_times.append(t_nearest)
-            times = list(set(valid_times))
-
-        for filter_fn in filter_fns:
-            times = list(filter(filter_fn, times))
+                raise NotImplementedError(
+                    f"No matching filtering method for `{filter_kind} == {filter_value}`."
+                    "If you're trying to filter based on datetime attributes the available "
+                    f"ones are: {', '.join(time_filters.DATETIME_ATTRS)}"
+                )
 
         if len(times) == 0:
             raise Exception("No valid times found")
