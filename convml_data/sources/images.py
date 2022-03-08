@@ -72,7 +72,9 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
                 channels = list(goes16.parse_product_shorthand(product).keys())
                 # TODO: for now we will invert the Radiance channel values when
                 # creating RGB images from them
-                da_rgba = make_rgb(da_scene, channel=channels, invert_values=True)
+                da_rgba = make_rgb(
+                    da_scene, channel=channels, invert_values=True, alpha=1.0
+                )
             elif product.startswith("singlechannel__"):
                 raise NotImplementedError(product)
             else:

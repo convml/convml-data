@@ -8,6 +8,8 @@ URL_FORMAT = (
     "CER_GEO_Ed4_{platform_id}_{version}_%Y.{day_of_year:03d}.%H%M.06K.nc"
 )
 
+MISSING_TIMES = dict(goes16n=["201812181630"])
+
 
 TIME_FORMAT = "%Y%m%d%H%M"
 FILENAME_FORMAT = "{time}__{satellite}.nc"
@@ -45,5 +47,7 @@ def get_available_files(t_start, t_end, satellite):
 
     t = t0
     while t < t_end:
-        yield make_local_filename(time=t, satellite=satellite)
+        fn = make_local_filename(time=t, satellite=satellite)
+        if fn not in MISSING_TIMES.get(satellite, []):
+            yield fn
         t += datetime.timedelta(hours=1)
