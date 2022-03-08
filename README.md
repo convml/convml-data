@@ -117,16 +117,20 @@ time:
 ```
 
 And you may optionally list filters to use to only include times match the
-filter arguments (at the moment only `N_hours_from_zenith` may be used which
-calculates the zenith time in the center of the domain and filters based on
-time-difference to this time):
+filter arguments. You can filter on any `datetime` compent (for example the
+`hour`, `minute`, `day`) and there's a specialised filter option called
+`N_hours_from_zenith` which calculates the zenith time in the center of the
+domain and filters based on time-difference to this time). For example to
+select all times on and half-past the hour a maximum of 4 hours from zenith on
+the 2/2/2020 you would use the following:
 
 ```yaml
 time:
-  t_start: 2020-02-02T14:00
-  t_end: 2020-02-02T14:30
+  t_start: 2020-02-02T00:00
+  t_end: 2020-02-03T00:00
   filters:
     N_hours_from_zenith: 4.0
+    minutes: [0, 30]
 ```
 
 
