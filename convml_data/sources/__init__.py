@@ -14,10 +14,9 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
     if source_name == "goes16":
         if source_type == "truecolor_rgb":
             channels = [1, 2, 3]
-        elif source_type.startswith("multichannel__"):
-            _, channels_str = source_type.split("__")
-            channels = [int(v) for v in channels_str.split("_")]
-        elif source_type.startswith("singlechannel__"):
+        elif source_type.startswith("multichannel__") or source_type.startswith(
+            "singlechannel__"
+        ):
             channels = list(goes16.parse_product_shorthand(source_type).keys())
         else:
             raise NotImplementedError(source_type)

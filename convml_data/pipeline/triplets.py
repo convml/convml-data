@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import luigi
@@ -132,11 +133,22 @@ def sample_triplet_tile_locations(tiles_meta, domain, data_source):
     tile_size = dx * tile_N
 
     tile_locations = []
-    for tile_meta in tiles_meta:
+    for n, tile_meta in enumerate(tiles_meta):
+        # to ensure that we don't get repeated tile locations generated when
+        # running with luigi (which uses multiprocessing) we need to initiate a
+        # random-number generator here while passing in the process id
+        rng_seed = (
+            os.getpid(),
+            n,
+            tile_meta["triplet_id"],
+        )
+        rng = np.random.default_rng(rng_seed)
+
         triplet_tile_locations = triplet_sampling.generate_triplet_location(
             domain=domain,
             tile_size=tile_size,
             neigh_dist_scaling=neigh_dist_scaling,
+            rng=rng,
         )
 
         tile_types = []

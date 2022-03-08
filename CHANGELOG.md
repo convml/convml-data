@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased](https://github.com/convml/convml-data/tree/HEADER)
+
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.1...)
+
+*enhancements*
+
+- Keep internal list of time for which CERES (SatCORPS) data is known to be
+  missing so that we don't request these files.
+  [\#21](https://github.com/convml/convml-data/pull/21)
+
+*bugfixes*
+
+- Fix creation of tile images from "multichannel" sources that arose from using
+  `matplotlib` to create the tile image, now images are created directly using
+  `PIL`.
+  [\#22](https://github.com/convml/convml-data/pull/22)
+
+
+## [v0.2.1](https://github.com/convml/convml-data/tree/v0.2.1)
+
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.0...v0.2.1)
+
+*bugfixes*
+
+- Fix issue where satpy would return brightness temperature for some channels
+  but radiance for others for GOES-16 data. Always use radiance by default from
+  now on. [\#20](https://github.com/convml/convml-data/pull/20)
+
+- Fix issue where triplet tiles generated with multiple workers in parallel
+  sometimes were at repeated locations, i.e. some tiles were exactly at the
+  same locations [\#19](https://github.com/convml/convml-data/pull/19)
+
 
 ## [v0.2.0](https://github.com/convml/convml-data/tree/v0.2.0)
 
