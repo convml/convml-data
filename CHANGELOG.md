@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased](https://github.com/convml/convml-data/tree/HEADER)
+
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.1...)
+
+*enhancements*
+
+- Keep internal list of time for which CERES (SatCORPS) data is known to be
+  missing so that we don't request these files.
+  [\#21](https://github.com/convml/convml-data/pull/21)
+
 
 ## [v0.2.1](https://github.com/convml/convml-data/tree/v0.2.1)
 
