@@ -80,12 +80,15 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
             else:
                 raise NotImplementedError(product)
 
-            # PIL assumes image shape (w, h, channels) and requires unsigned
-            # 8bit ints
-            rgba_values = (
-                (255.0 * da_rgba.transpose("x", "y", "rgba")).astype(np.uint8).values
+            # PIL assumes image shape (h, w, channels), indexes from
+            # bottom-left of image, no need for alpha values and requires
+            # unsigned 8bit ints
+            rgb_values = (
+                (255.0 * da_rgba.transpose("y", "x", "rgba"))
+                .astype(np.uint8)
+                .values[::-1, :, :3]
             )
-            img_domain = Image.fromarray(rgba_values)
+            img_domain = Image.fromarray(rgb_values)
         else:
             raise NotImplementedError(product)
     else:
