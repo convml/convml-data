@@ -18,6 +18,11 @@
   [\#22](https://github.com/convml/convml-data/pull/22)
 
 
+*internal*
+
+- Simplify the code for applying time-filters to ease adding new filters in
+  future [\#22](https://github.com/convml/convml-data/pull/22)
+
 ## [v0.2.1](https://github.com/convml/convml-data/tree/v0.2.1)
 
 [Full Changelog](https://github.com/convml/convml-data/compare/v0.2.0...v0.2.1)
