@@ -75,6 +75,9 @@ class CropSceneSourceFiles(luigi.Task):
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
     aux_name = luigi.OptionalParameter(default=None)
+    create_image = luigi.BoolParameter(
+        default=True, parsing=luigi.BoolParameter.EXPLICIT_PARSING
+    )
 
     @property
     def data_source(self):
@@ -115,13 +118,14 @@ class CropSceneSourceFiles(luigi.Task):
         )
 
         img_cropped = None
-        if source_name == "goes16" and product == "truecolor_rgb":
-            # to be able to create a RGB image with satpy we need to set the
-            # attrs again to ensure we get a proper RGB image
-            da_cropped.attrs.update(da_full.attrs)
-        img_cropped = create_image(
-            da=da_cropped, source_name=source_name, product=product
-        )
+        if self.create_image:
+            if source_name == "goes16" and product == "truecolor_rgb":
+                # to be able to create a RGB image with satpy we need to set the
+                # attrs again to ensure we get a proper RGB image
+                da_cropped.attrs.update(da_full.attrs)
+            img_cropped = create_image(
+                da=da_cropped, source_name=source_name, product=product
+            )
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
@@ -152,8 +156,9 @@ class CropSceneSourceFiles(luigi.Task):
         fn_data = f"{self.scene_id}.nc"
         outputs = dict(data=XArrayTarget(str(data_path / fn_data)))
 
-        fn_image = f"{self.scene_id}.png"
-        outputs["image"] = ImageTarget(str(data_path / fn_image))
+        if self.create_image:
+            fn_image = f"{self.scene_id}.png"
+            outputs["image"] = ImageTarget(str(data_path / fn_image))
 
         return outputs
 
@@ -202,6 +207,9 @@ class GenerateCroppedScenes(SceneBulkProcessingBaseTask):
     data_path = luigi.Parameter(default=".")
     TaskClass = CropSceneSourceFiles
 
+    create_images = luigi.BoolParameter(
+        default=True, parsing=luigi.BoolParameter.EXPLICIT_PARSING
+    )
     aux_name = luigi.OptionalParameter(default=None)
 
     def _get_scene_ids_task_class(self):
@@ -211,7 +219,7 @@ class GenerateCroppedScenes(SceneBulkProcessingBaseTask):
             return CheckForAuxiliaryFiles
 
     def _get_task_class_kwargs(self, scene_ids):
-        return dict(aux_name=self.aux_name)
+        return dict(aux_name=self.aux_name, create_image=self.create_images)
 
     def _get_scene_ids_task_kwargs(self):
         if self.aux_name is None:
