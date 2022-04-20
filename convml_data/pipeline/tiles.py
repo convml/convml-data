@@ -208,9 +208,11 @@ class SceneTilesData(_SceneRectSampleBase):
         if self.aux_name is None:
             source_name = data_source.source
             product = data_source.type
+            product_name = data_source.name
         else:
             source_name = self.data_source.aux_products[self.aux_name]["source"]
             product = self.data_source.aux_products[self.aux_name]["type"]
+            product_name = self.aux_name
 
         tile_N = data_source.sampling[self.tiles_kind].get("tile_N")
 
@@ -241,7 +243,10 @@ class SceneTilesData(_SceneRectSampleBase):
             # if self.aux_name is not None:
             # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
             img_tile = create_source_image(
-                da=da_tile, source_name=source_name, product=product
+                da_scene=da_tile,
+                source_name=source_name,
+                product=product,
+                context=dict(datasource_path=self.data_path, product_name=product_name),
             )
             if tile_N is not None:
                 if hasattr(img_tile, "size"):

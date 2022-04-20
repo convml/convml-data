@@ -8,7 +8,12 @@ from pathlib import Path
 import luigi
 
 from .. import DataSource
-from ..sources import build_query_tasks, get_time_for_filename, goes16
+from ..sources import (
+    build_query_tasks,
+    get_time_for_filename,
+    get_user_function_source_input_names,
+    goes16,
+)
 from ..utils.luigi import DBTarget
 
 log = logging.getLogger()
@@ -58,15 +63,19 @@ def merge_multichannel_sources(files_per_channel, time_fn):
     return scene_filesets
 
 
-def create_scenes_from_multichannel_queries(inputs, source_name, product):
+def create_scenes_from_multichannel_queries(
+    inputs, source_name, product, product_meta={}
+):
     scenes_by_time = {}
     channels_and_filenames = OrderedDict()
     if product == "truecolor_rgb":
         channel_order = [1, 2, 3]
     elif product.startswith("multichannel__"):
         channel_order = list(goes16.parse_product_shorthand(product).keys())
+    elif product == "user_function":
+        channel_order = get_user_function_source_input_names(product_meta=product_meta)
     else:
-        raise NotImplementedError(product)
+        raise NotImplementedError(product, source_name)
 
     opened_inputs = {}
     for input_name, input_parts in inputs.items():

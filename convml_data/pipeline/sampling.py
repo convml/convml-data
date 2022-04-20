@@ -98,15 +98,31 @@ class CropSceneSourceFiles(luigi.Task):
 
         if self.aux_name is None:
             source_name = data_source.source
-            product = data_source.type
+            product_type = data_source.type
+            product_name = self.data_source.name
+            if (
+                product_type == "user_function"
+                and "input" not in self.data_source._meta
+            ):
+                raise Exception(
+                    "To use a user-function on the primary data-set being"
+                    " produced you need to define the channels used by defining"
+                    " the section `input` in the input `meta.yaml` file"
+                )
+            product_meta = dict(
+                name=product_name, input=self.data_source._meta["input"]
+            )
         else:
             source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product = self.data_source.aux_products[self.aux_name]["type"]
+            product_type = self.data_source.aux_products[self.aux_name]["type"]
+            product_name = self.aux_name
+            product_meta = self.data_source.aux_products[self.aux_name]
 
         da_full = extract_variable(
             task_input=self.input()["data"],
             data_source=source_name,
-            product=product,
+            product=product_type,
+            product_meta=product_meta,
         )
 
         domain = self.domain
@@ -115,12 +131,16 @@ class CropSceneSourceFiles(luigi.Task):
         )
 
         img_cropped = None
-        if source_name == "goes16" and product == "truecolor_rgb":
+        if source_name == "goes16" and product_type == "truecolor_rgb":
             # to be able to create a RGB image with satpy we need to set the
             # attrs again to ensure we get a proper RGB image
             da_cropped.attrs.update(da_full.attrs)
+
         img_cropped = create_image(
-            da=da_cropped, source_name=source_name, product=product
+            da_scene=da_cropped,
+            source_name=source_name,
+            product=product_type,
+            context=dict(datasource_path=self.data_path, product_name=product_name),
         )
 
         self.output_path.mkdir(exist_ok=True, parents=True)
