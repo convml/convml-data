@@ -73,7 +73,7 @@ def crop_field(da, bbox_domain):
 
 
 def _calc_umag(da_u, da_v):
-    da = np.sqrt(da_v ** 2.0 + da_u ** 2.0)
+    da = np.sqrt(da_v**2.0 + da_u**2.0)
     da.name = "umag"
     da.attrs["long_name"] = "windspeed"
     da.attrs["units"] = da_u.units
