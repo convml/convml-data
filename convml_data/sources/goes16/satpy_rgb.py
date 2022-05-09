@@ -112,7 +112,10 @@ def load_radiance_channel(scene_fn, channel_number, derived_variable=None):
     # but we need to pick out the right variable in the dataset
 
     var_name = f"C{channel_number:02d}"
-    ds = xr.open_dataset(scene_fn)
+    try:
+        ds = xr.open_dataset(scene_fn)
+    except ValueError as ex:
+        raise Exception(f"There was an issue opening `{scene_fn}`") from ex
 
     if derived_variable is None:
         calibration = "radiance"
