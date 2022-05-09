@@ -23,6 +23,19 @@
 - Simplify the code for applying time-filters to ease adding new filters in
   future [\#22](https://github.com/convml/convml-data/pull/22)
 
+## [Unreleased](https://github.com/convml/convml-data/tree/HEAD)
+
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.1...HEAD)
+
+
+*maintenance*
+
+- Update `black` version to fix issue which arose with upstream dependency and
+  switch to `conda-incubator/setup-miniconda` for CI conda (since
+  `s-weigand/setup-conda` broke)
+  [\#28](https://github.com/convml/convml-data/pull/28)
+
+
 ## [v0.2.1](https://github.com/convml/convml-data/tree/v0.2.1)
 
 [Full Changelog](https://github.com/convml/convml-data/compare/v0.2.0...v0.2.1)
