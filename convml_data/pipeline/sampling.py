@@ -100,18 +100,16 @@ class CropSceneSourceFiles(luigi.Task):
             source_name = data_source.source
             product_type = data_source.type
             product_name = self.data_source.name
-            if (
-                product_type == "user_function"
-                and "input" not in self.data_source._meta
-            ):
-                raise Exception(
-                    "To use a user-function on the primary data-set being"
-                    " produced you need to define the channels used by defining"
-                    " the section `input` in the input `meta.yaml` file"
-                )
-            product_meta = dict(
-                name=product_name, input=self.data_source._meta["input"]
-            )
+            product_meta = dict(name=product_name)
+            if product_type == "user_function":
+                if "input" not in self.data_source._meta:
+                    raise Exception(
+                        "To use a user-function on the primary data-set being"
+                        " produced you need to define the channels used by defining"
+                        " the section `input` in the input `meta.yaml` file"
+                    )
+                else:
+                    product_meta["input"] = self.data_source._meta["input"]
         else:
             source_name = self.data_source.aux_products[self.aux_name]["source"]
             product_type = self.data_source.aux_products[self.aux_name]["type"]
