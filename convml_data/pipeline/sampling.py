@@ -7,9 +7,10 @@ import luigi
 import regridcart as rc
 
 from .. import DataSource
-from ..sources import build_fetch_tasks, create_image, extract_variable
+from ..sources import build_fetch_tasks, extract_variable
 from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
+from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
 
@@ -70,7 +71,7 @@ class SceneSourceFiles(luigi.Task):
             return luigi.LocalTarget(f"__fake_target__{self.scene_id}__")
 
 
-class CropSceneSourceFiles(luigi.Task):
+class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
@@ -128,24 +129,12 @@ class CropSceneSourceFiles(luigi.Task):
             domain=domain, da=da_full, pad_pct=self.pad_ptc
         )
 
-        img_cropped = None
-        if source_name == "goes16" and product_type == "truecolor_rgb":
-            # to be able to create a RGB image with satpy we need to set the
-            # attrs again to ensure we get a proper RGB image
-            da_cropped.attrs.update(da_full.attrs)
-
-        img_cropped = create_image(
-            da_scene=da_cropped,
-            source_name=source_name,
-            product=product_type,
-            context=dict(datasource_path=self.data_path, product_name=product_name),
-        )
+        img_cropped = self._create_image(da_scene=da_cropped, da_src=da_full)
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
 
-        if img_cropped is not None:
-            self.output()["image"].write(img_cropped)
+        self.output()["image"].write(img_cropped)
 
     @property
     def output_path(self):

@@ -6,11 +6,11 @@ import xarray as xr
 
 from .. import DataSource
 from ..sampling import domain as sampling_domain
-from ..sources import create_image as create_source_image
 from ..utils.luigi import DBTarget, XArrayTarget, YAMLTarget
 from . import trajectory_tiles, triplets
 from .aux_sources import CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
+from .scene_images import SceneImageMixin
 
 
 class TilesInScene(luigi.Task):
@@ -155,7 +155,7 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
         return output_path.parent / f"cropped_for_{self.tiles_kind}"
 
 
-class SceneTilesData(_SceneRectSampleBase):
+class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
     tiles_kind = luigi.Parameter()
     aux_name = luigi.OptionalParameter(default=None)
 
@@ -205,15 +205,6 @@ class SceneTilesData(_SceneRectSampleBase):
         data_source = self.data_source
         dx = data_source.sampling["resolution"]
 
-        if self.aux_name is None:
-            source_name = data_source.source
-            product = data_source.type
-            product_name = data_source.name
-        else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product = self.data_source.aux_products[self.aux_name]["type"]
-            product_name = self.aux_name
-
         tile_N = data_source.sampling[self.tiles_kind].get("tile_N")
 
         for tile_identifier, tile_domain, tile_meta in self.tile_domains:
@@ -235,19 +226,8 @@ class SceneTilesData(_SceneRectSampleBase):
             Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
             tile_output["data"].write(da_tile)
 
-            if source_name == "goes16" and product == "truecolor_rgb":
-                # to be able to create a RGB image with satpy we need to set the
-                # attrs again to ensure we get a proper RGB image
-                da_tile.attrs.update(da_src.attrs)
+            img_tile = self._create_image(da_scene=da_tile, da_src=da_src)
 
-            # if self.aux_name is not None:
-            # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
-            img_tile = create_source_image(
-                da_scene=da_tile,
-                source_name=source_name,
-                product=product,
-                context=dict(datasource_path=self.data_path, product_name=product_name),
-            )
             if tile_N is not None:
                 if hasattr(img_tile, "size"):
                     img_shape = img_tile.size
