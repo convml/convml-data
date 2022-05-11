@@ -5,7 +5,7 @@ import luigi
 import numpy as np
 
 from .. import DataSource
-from ..sources import build_query_tasks
+from ..sources import IncompleteSourceDefition, build_query_tasks
 from ..utils.luigi import DBTarget
 from .scene_sources import (
     GenerateSceneIDs,
@@ -36,12 +36,19 @@ class CheckForAuxiliaryFiles(luigi.Task):
         aux_product_name = self.aux_product_name
         source_data_path = Path(self.data_path) / "source_data" / aux_source_name
 
-        tasks["product"] = build_query_tasks(
-            source_name=aux_source_name,
-            source_type=aux_product_name,
-            source_data_path=source_data_path,
-            time_intervals=self.data_source.time_intervals,
-        )
+        try:
+            tasks["product"] = build_query_tasks(
+                source_name=aux_source_name,
+                source_type=aux_product_name,
+                source_data_path=source_data_path,
+                time_intervals=self.data_source.time_intervals,
+                product_meta=self.aux_product_meta,
+            )
+        except IncompleteSourceDefition as ex:
+            raise Exception(
+                "There was a problem creating queries for your"
+                f" definition of `{self.aux_name}`"
+            ) from ex
 
         return tasks
 
@@ -94,6 +101,7 @@ class CheckForAuxiliaryFiles(luigi.Task):
                 inputs=product_input,
                 source_name=aux_source_name,
                 product=aux_product_name,
+                product_meta=self.aux_product_meta,
             )
         else:
             aux_scenes_by_time = {}
