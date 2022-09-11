@@ -1,3 +1,15 @@
+"""
+Produce co-located values of a) cloud organising embeddings and b) a
+auxiliary scalar field. There are a few ways this co-location is done:
+
+1. Individual tiles onto which the auxiliary field is regridded and the
+   auxiliary is then reduced with a specific operation (for example computing
+   the mean)
+2. `rect` regridded domains on which embeddings are produced at a fixed spacing
+   by sampling tiles on this domain. This produces embedding vectors at
+   individual points. These embeddings are then interpolated onto the grid of
+   the auxiliary fields.
+"""
 from pathlib import Path
 
 import luigi
@@ -8,8 +20,11 @@ import xarray as xr
 import xesmf as xe
 
 from . import data_filters, utils
-from .datasources import FieldCropped
-from .rect import find_bbox
+from ...tiles import SceneTilesData
+from ...embeddings.sampling import TileEmbeddings
+from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
+from ...sampling import CropSceneSourceFiles
+from ...utils import SceneBulkProcessingBaseTask
 
 
 def scale_km_to_m(da_c):
@@ -49,16 +64,18 @@ def regrid_emb_var_onto_variable(da_emb, da_v, method="nearest_s2d"):
     return da_emb_regridded
 
 
-class ColumnScalarEmbeddingScatterData(luigi.Task):
+class SceneSlidingWindowEmbeddingsAuxFieldProjection(luigi.Task):
     """
     Regrid embedding variable onto grid of auxillariary field for a single
     scene and optionally reduce using a given operation per segment
     """
-
-    scalar_name = luigi.Parameter()
+    data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
-    emb_filepath = luigi.Parameter()
-    datapath = luigi.Parameter()
+    model_path = luigi.Parameter()
+    step_size = luigi.IntParameter(default=10)
+    prediction_batch_size = luigi.IntParameter(default=32)
+
+    aux_name = luigi.Parameter()
 
     column_function = luigi.Parameter(default=None)
     segments_filepath = luigi.Parameter(default=None)
@@ -74,24 +91,28 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
         return []
 
     def requires(self):
-        da_emb = xr.open_dataarray(self.emb_filepath)
-        deg_pad = 1.0
-        bbox_domain = find_bbox(da_grid=da_emb, deg_pad=deg_pad)
         tasks = {}
-        tasks["data"] = FieldCropped(
+        tasks["emb"] = SceneSlidingWindowImageEmbeddings(
+            data_path=self.data_path,
             scene_id=self.scene_id,
-            bbox=bbox_domain,
-            var_name=self.scalar_name,
-            datapath=self.datapath,
+            model_path=self.model_path,
+            step_size=self.step_size,
+            prediction_batch_size=self.prediction_batch_size
+        )
+
+        # aux field tasks below
+        tasks["aux"] = CropSceneSourceFiles(
+            scene_id=self.scene_id,
+            data_path=self.data_path,
+            aux_name=self.aux_name,
         )
         for filter_meta in self._parse_filters():
             filter_tasks = {}
             for reqd_field_name in filter_meta["reqd_props"]:
-                filter_tasks[reqd_field_name] = FieldCropped(
+                filter_tasks[reqd_field_name] = CropSceneSourceFiles(
                     scene_id=self.scene_id,
-                    bbox=bbox_domain,
-                    var_name=reqd_field_name,
-                    datapath=self.datapath,
+                    data_path=self.data_path,
+                    aux_name=reqd_field_name,
                 )
             tasks.setdefault("filter_data", []).append(filter_tasks)
 
@@ -104,8 +125,8 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
             raise NotImplementedError(self.reduce_op)
 
     def run(self):
-        da_scalar = self.input()["data"].open()
-        da_emb_src = xr.open_dataarray(self.emb_filepath)
+        da_scalar = self.input()["aux"]["data"].open()
+        da_emb_src_scene = self.input()["emb"].open()
 
         filters = self._parse_filters()
         if len(filters) > 0:
@@ -139,8 +160,8 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
                 **{c: scale_km_to_m(da_segments_src[c]) for c in "xy"}
             )
             da_segments_src = da_segments_src.sel(k=self.segmentation_threshold)
-            da_segments_src["lat"] = da_emb_src.lat
-            da_segments_src["lon"] = da_emb_src.lon
+            da_segments_src["lat"] = da_emb_src_scene.lat
+            da_segments_src["lon"] = da_emb_src_scene.lon
             da_segments_src = da_segments_src.sel(scene_id=self.scene_id)
 
             # regrid segments onto scalar's grid
@@ -151,8 +172,6 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
             da_segments = None
 
         # regrid embedding position onto scalar xy-grid (lat,lon)
-        da_emb_src_scene = da_emb_src.sel(scene_id=self.scene_id)
-
         if "lat" not in da_scalar.coords:
             # and "lat" not in da_scalar.data_vars:
             coords = rc.coords.get_latlon_coords_using_crs(da=da_scalar)
@@ -185,7 +204,7 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
             da_scalar = da_scalar.drop("t")
 
         # ensure that the scalar has the name that we requested data for
-        da_scalar.name = self.scalar_name
+        da_scalar.name = self.aux_name
 
         ds = xr.merge([da_scalar, da_emb])
 
@@ -241,11 +260,11 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
         return da_scalar
 
     def output(self):
-        emb_name = Path(self.emb_filepath).name.replace(".nc", "")
+        emb_name = f"{self.model_path}.{self.step_size}"
 
         name_parts = [
             self.scene_id,
-            self.scalar_name,
+            self.aux_name,
             "by",
             emb_name,
         ]
@@ -262,7 +281,92 @@ class ColumnScalarEmbeddingScatterData(luigi.Task):
 
         fn = ".".join(name_parts) + ".nc"
 
-        p = Path(self.datapath) / "scatterdata" / fn
+        p = Path(self.data_path) / "embeddings_with_aux" / fn
+        return utils.XArrayTarget(str(p))
+
+
+class SceneAuxFieldWithEmbeddings(luigi.Task):
+    aux_name = luigi.OptionalParameter()
+    scene_id = luigi.Parameter()
+    tiles_kind = luigi.Parameter()
+
+    model_path = luigi.Parameter()
+    step_size = luigi.IntParameter(default=100)
+    prediction_batch_size = luigi.IntParameter(default=32)
+
+    data_path = luigi.Parameter(default=".")
+    crop_pad_ptc = luigi.FloatParameter(default=0.1)
+
+    def requires(self):
+        if self.tiles_kind == "rect-slidingwindow":
+            return SceneSlidingWindowEmbeddingsAuxFieldProjection(
+                data_path=self.data_path,
+                scene_id=self.scene_id,
+                aux_name=self.aux_name,
+                model_path=self.model_path,
+                step_size=self.step_size,
+                prediction_batch_size=self.prediction_batch_size
+            )
+        else:
+            tasks = {}
+            tasks["aux"] = SceneTilesData(
+                data_path=self.data_path,
+                aux_name=self.aux_name,
+                scene_id=self.scene_id,
+                tiles_kind=self.tiles_kind,
+            )
+            tasks["embeddings"] = TileEmbeddings(
+                data_path=self.data_path,
+                scene_id=self.scene_id,
+                tiles_kind=self.tiles_kind,
+                model_path=self.model_path,
+                step_size=self.step_size,
+                prediction_batch_size=self.prediction_batch_size
+            )
+            return tasks
+
+    def run(self):
+        if self.tiles_kind == "rect-slidingwindow":
+            pass
+        else:
+            raise NotImplementedError(self.tiles_kind)
+
+    def output(self):
+        if self.tiles_kind == "rect-slidingwindow":
+            return self.input()
+        else:
+            raise NotImplementedError(self.tiles_kind)
+
+
+class DatasetSceneAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
+    data_path = luigi.Parameter(default=".")
+    TaskClass = SceneAuxFieldWithEmbeddings
+
+
+    def _output(self):
+        emb_name = Path(self.emb_filepath).name.replace(".nc", "")
+
+        name_parts = [
+            self.scalar_name,
+            "regridded",
+        ]
+
+        if self.filters is not None:
+            name_parts.append(self.filters.replace("=", ""))
+
+        if self.column_function is not None:
+            name_parts.append(self.column_function)
+
+        if self.segments_filepath is not None:
+            name_parts.append(f"{self.segmentation_threshold}seg")
+
+        if self.segments_filepath is not None or self.column_function is not None:
+            name_parts.append(self.reduce_op)
+
+        identifier = ".".join(name_parts)
+        fn = f"{identifier}.nc"
+
+        p = Path(self.data_path) / emb_name / fn
         return utils.XArrayTarget(str(p))
 
 
@@ -270,7 +374,7 @@ class RegridEmbeddingsOnAuxField(luigi.Task):
     scalar_name = luigi.Parameter()
     scene_ids = luigi.ListParameter(default=[])
     emb_filepath = luigi.Parameter()
-    datapath = luigi.Parameter()
+    data_path = luigi.Parameter()
 
     column_function = luigi.Parameter(default=None)
     segments_filepath = luigi.Parameter(default=None)
@@ -287,7 +391,7 @@ class RegridEmbeddingsOnAuxField(luigi.Task):
             scene_ids = self.scene_ids
 
         return {
-            scene_id: ColumnScalarEmbeddingScatterData(
+            scene_id: SceneSlidingWindowEmbeddingsAuxProjection(
                 scene_id=scene_id,
                 scalar_name=self.scalar_name,
                 emb_filepath=self.emb_filepath,
@@ -296,7 +400,7 @@ class RegridEmbeddingsOnAuxField(luigi.Task):
                 segmentation_threshold=self.segmentation_threshold,
                 # n_scalar_bins=self.n_scalar_bins,
                 reduce_op=self.reduce_op,
-                datapath=self.datapath,
+                data_path=self.data_path,
                 filters=self.filters,
             )
             for scene_id in scene_ids
@@ -342,5 +446,5 @@ class RegridEmbeddingsOnAuxField(luigi.Task):
         identifier = ".".join(name_parts)
         fn = f"{identifier}.nc"
 
-        p = Path(self.datapath) / emb_name / fn
+        p = Path(self.data_path) / emb_name / fn
         return utils.XArrayTarget(str(p))

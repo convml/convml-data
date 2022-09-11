@@ -106,7 +106,7 @@ def get_time_for_filename(source_name, filename):
     return t
 
 
-def extract_variable(task_input, data_source, product):
+def extract_variable(task_input, data_source, product, bbox_crop=None):
     if data_source == "ceres":
         _, var_name = product.split("__")
         ds = task_input.open()
@@ -121,7 +121,7 @@ def extract_variable(task_input, data_source, product):
 
             scene_fns = [inp.fn for inp in task_input]
             da = goes16.satpy_rgb.load_rgb_files_and_get_composite_da(
-                scene_fns=scene_fns
+                scene_fns=scene_fns, bbox_crop=bbox_crop
             )
         elif product.startswith("multichannel__"):
             das = []

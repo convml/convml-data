@@ -9,9 +9,9 @@ from eurec4a_environment.constants import cp_d, g
 from eurec4a_environment.variables import atmos as atmos_variables
 from eurec4a_environment.variables import tropical as tropical_variables
 from eurec4a_environment.variables.utils import apply_by_column
-from lagtraj.domain.sources.era5.utils import calculate_heights_and_pressures
+# from lagtraj.domain.sources.era5.utils import calculate_heights_and_pressures
 
-from ...pipeline import parse_scene_id
+from ...scene_sources import parse_scene_id
 from . import datasources, utils
 
 levels_bl = dict(level=slice(120, None))

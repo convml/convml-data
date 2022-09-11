@@ -15,7 +15,7 @@ import luigi
 import xarray as xr
 import xesmf as xe
 
-from . import datasources, utils
+from ... import sources, utils
 
 
 def find_bbox(da_grid, deg_pad=1.0):
@@ -54,9 +54,9 @@ class FieldReprojected(luigi.Task):
         bbox_domain = find_bbox(da_grid=da_grid, deg_pad=deg_pad)
 
         if any([self.var_name.startswith(rad_var) for rad_var in rad_vars]):
-            TaskClass = datasources.ceres.CeresFieldCropped
+            TaskClass = sources.ceres.CeresFieldCropped
         else:
-            TaskClass = datasources.era5.ERA5FieldCropped
+            TaskClass = sources.era5.ERA5FieldCropped
 
         return TaskClass(
             scene_id=self.scene_id, bbox=bbox_domain, var_name=self.var_name

@@ -156,6 +156,9 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
 
 
 class SceneTilesData(_SceneRectSampleBase):
+    """
+    Generate all tiles for a specific scene
+    """
     tiles_kind = luigi.Parameter()
     aux_name = luigi.OptionalParameter(default=None)
 

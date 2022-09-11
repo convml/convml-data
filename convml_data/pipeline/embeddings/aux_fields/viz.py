@@ -8,15 +8,15 @@ import seaborn as sns
 import xarray as xr
 
 from . import plot_types
-from .data import RegridEmbeddingsOnAuxField
+from .data import DatasetSceneAuxFieldWithEmbeddings
 
 
 class AggPlotBaseTask(luigi.Task):
     scalar_name = luigi.Parameter()
     scene_ids = luigi.OptionalParameter(default=[])
-    emb_filepath = luigi.Parameter()
-    datapath = luigi.Parameter()
+    tiles_kind = luigi.Parameter()
 
+    datapath = luigi.Parameter(default=".")
     column_function = luigi.Parameter(default=None)
     segments_filepath = luigi.Parameter(default=None)
     segmentation_threshold = luigi.FloatParameter(default=0.0005)

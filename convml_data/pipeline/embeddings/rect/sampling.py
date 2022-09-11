@@ -13,10 +13,10 @@ from convml_tt.system import TripletTrainerModel
 from convml_tt.utils import get_embeddings
 from PIL import Image
 
-from ...utils.luigi import XArrayTarget
-from ... import DataSource
-from .. import SceneBulkProcessingBaseTask, SceneRegriddedData
-from .tiles import DatasetScenesSlidingWindowImageTiles
+from ....utils.luigi import XArrayTarget
+from .... import DataSource
+from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
+from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
 
 
 class SlidingWindowImageEmbeddings(luigi.Task):
@@ -91,6 +91,8 @@ class SlidingWindowImageEmbeddings(luigi.Task):
         da_pred.attrs["model_path"] = self.model_path
         da_pred.attrs["image_path"] = self.image_path
         da_pred.attrs["src_data_path"] = self.src_data_path
+
+        da_pred.name = "emb"
 
         Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
         da_pred.to_netcdf(self.output().fn)

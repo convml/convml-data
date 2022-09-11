@@ -38,8 +38,11 @@ def _cleanup_composite_da_attrs(da_composite):
     return da_composite
 
 
-def load_rgb_files_and_get_composite_da(scene_fns):
+def load_rgb_files_and_get_composite_da(scene_fns, bbox_crop=None):
     scene = satpy.Scene(reader="abi_l1b", filenames=scene_fns)
+
+    # open channel 2, we will need it below
+    ds_ch2 = xr.open_dataset(scene_fns[1])
 
     # instruct satpy to load the channels necessary for the `true_color`
     # composite
@@ -49,6 +52,26 @@ def load_rgb_files_and_get_composite_da(scene_fns):
     # different spatial resolution. By not passing in an "area" the highest
     # resolution possible will be used
     new_scn = scene.resample(resampler="native")
+
+    # 2022/9/9: for some reason it looks like satpy has stopped including the x
+    # and y-values when I pick out the xr.DataArray values like I do below
+    reqd_coords = ["x", "y"]
+    for reqd_coord in reqd_coords:
+        if reqd_coord not in new_scn["true_color"].coords:
+            coord_values = (
+                ds_ch2[reqd_coord]
+                * ds_ch2.goes_imager_projection.perspective_point_height
+            )
+            new_scn["true_color"][reqd_coord] = coord_values
+
+    # use satpy's cropping for latlon-bbox crop
+    if bbox_crop is not None:
+        if len(bbox_crop) != 4:
+            raise Exception(bbox_crop)
+        # satpy bbox: [WSEN]
+        new_scn = new_scn.crop(
+            ll_bbox=[bbox_crop[0], bbox_crop[2], bbox_crop[1], bbox_crop[3]]
+        )
 
     # get out a dask-backed DataArray for the composite
     da_truecolor = new_scn["true_color"]
@@ -60,12 +83,13 @@ def load_rgb_files_and_get_composite_da(scene_fns):
     # all use the same grid) into the coordinate of the data-array. This will
     # make sure that if the data-array is saved to file that CF-compliant
     # projection information is still available
-    ds_ch1 = xr.open_dataset(scene_fns[0])
-    grid_mapping = ds_ch1.Rad.grid_mapping
-    da_truecolor.coords[grid_mapping] = ds_ch1[grid_mapping]
+    grid_mapping = ds_ch2.Rad.grid_mapping
+    da_truecolor.coords[grid_mapping] = ds_ch2[grid_mapping]
 
     # remove all attributes that satpy adds which can't be serialised to a netCDF file
     da_truecolor = _cleanup_composite_da_attrs(da_truecolor)
+
+    da_truecolor.name = "rgb_truecolor"
 
     return da_truecolor
 

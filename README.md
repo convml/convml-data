@@ -275,3 +275,11 @@ luigi --module convml_tt.interpretation.rectpred.pipeline.transforms CreateAllPr
 ```bash
 luigi --module convml_tt.interpretation.rectpred.pipeline.transforms CreateAllPredictionMapsDataTransformed --embedding-model-path ml-data/fixednorm-stage-2.torch.pkl --step-size 30 --pretrained-transform-model pca_transform
 ```
+
+
+# Analysing auxiliary fields with embeddings
+
+
+```bash
+luigi --local-scheduler --module convml_data.pipeline.embeddings.aux_fields.data SceneAuxFieldWithEmbeddings --aux-name cloud_top_temperature --scene-id goes16__202002021540 --tiles-kind rect-slidingwindow --model-path fixednorm-stage-2.torch.pkl --step-size 100
+```

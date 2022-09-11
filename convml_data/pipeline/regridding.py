@@ -103,7 +103,15 @@ class SceneRegriddedData(_SceneRectSampleBase):
                 method = "bilinear"
             else:
                 method = "nearest_s2d"
+
             da_domain = rc.resample(domain=domain, da=da_src, dx=dx, method=method)
+            if "lat" in da_src.coords:
+                # XXX: this wasn't necessary previously and causes extra
+                # computation. Why aren't these variables included when
+                # interpolating?
+                da_domain["lat"] = rc.resample(domain=domain, da=da_src.lat, dx=dx, method=method)
+                da_domain["lon"] = rc.resample(domain=domain, da=da_src.lon, dx=dx, method=method)
+
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
         else:
@@ -114,11 +122,23 @@ class SceneRegriddedData(_SceneRectSampleBase):
             fig, _ = _plot_scene_aux(da_aux=da_domain, img=img_domain)
             fig.savefig(domain_output["image"].fn)
         else:
+
+            if self.aux_name is None:
+                source_name = self.data_source.source
+                product = self.data_source.type
+            else:
+                source_name = self.data_source.aux_products[self.aux_name]["source"]
+                product = self.data_source.aux_products[self.aux_name]["type"]
+
             # need the scene attrs to generate a rgb image
             if da_src is None:
                 da_src = self.input()["source_data"]["data"].open()
             img_domain = rgb_image_from_scene_data(
-                data_source=data_source, da_scene=da_domain, src_attrs=da_src.attrs
+                data_source=data_source,
+                da_scene=da_domain,
+                src_attrs=da_src.attrs,
+                source_name=source_name,
+                product=product
             )
             img_domain.save(str(domain_output["image"].fn))
 

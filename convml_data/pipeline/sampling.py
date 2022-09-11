@@ -103,16 +103,34 @@ class CropSceneSourceFiles(luigi.Task):
             source_name = self.data_source.aux_products[self.aux_name]["source"]
             product = self.data_source.aux_products[self.aux_name]["type"]
 
+        # XXX: below is a hack to use the gridding in satpy, this needs
+        # refactoring to clean it up
+
+        domain = self.domain
+        bbox_lons = domain.latlon_bounds[..., 0]
+        bbox_lats = domain.latlon_bounds[..., 1]
+        # WESN
+        bbox = [bbox_lons.min(), bbox_lons.max(), bbox_lats.min(), bbox_lats.max()]
+
         da_full = extract_variable(
             task_input=self.input()["data"],
             data_source=source_name,
             product=product,
+            bbox_crop=bbox
         )
 
-        domain = self.domain
-        da_cropped = rc.crop_field_to_domain(
-            domain=domain, da=da_full, pad_pct=self.pad_ptc
-        )
+        if source_name == "goes16":
+            da_cropped = da_full
+            coords = rc.coords.get_latlon_coords_using_crs(da=da_cropped)
+            # XXX: this is causing extra computation and didn't need to be
+            # useful. I need to work out why satpy or something else isn't
+            # including that lat/lon variables when interpolating
+            da_cropped["lat"] = coords["lat"]
+            da_cropped["lon"] = coords["lon"]
+        else:
+            da_cropped = rc.crop_field_to_domain(
+                domain=domain, da=da_full, pad_pct=self.pad_ptc
+            )
 
         img_cropped = None
         if source_name == "goes16" and product == "truecolor_rgb":
