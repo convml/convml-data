@@ -1,10 +1,8 @@
-import luigi
 from pathlib import Path
 
-from .rect.sampling import (
-    DatasetScenesSlidingWindowImageEmbeddings,
-    model_identifier_from_filename,
-)
+import luigi
+
+from .rect.sampling import DatasetScenesSlidingWindowImageEmbeddings
 
 
 class TileEmbeddings(luigi.Task):

@@ -4,7 +4,8 @@ from pathlib import Path
 import luigi
 import numpy as np
 import xarray as xr
-# from eurec4a_environment.variables import atmos as atmos_variables
+from eurec4a_environment.variables import atmos as atmos_variables
+
 # from lagtraj.domain.sources.era5.utils import calculate_heights_and_pressures
 from metpy import calc as mpcalc
 
@@ -15,6 +16,10 @@ levels_bl = dict(level=slice(120, None))
 levels_cl = dict(level=slice(101, 120))
 
 SURFACE_VARIABLES = ["sst"]
+
+
+def calculate_heights_and_pressures(*args, **kwargs):
+    raise NotImplementedError
 
 
 def _make_src_filename(

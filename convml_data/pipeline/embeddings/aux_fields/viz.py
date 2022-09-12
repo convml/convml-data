@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import xarray as xr
+from convml_tt.interpretation.embedding_transforms import apply_transform
 
 from . import plot_types
 from .data import DatasetScenesAuxFieldWithEmbeddings, model_identifier_from_filename
-from convml_tt.interpretation.embedding_transforms import apply_transform
 
 
 class AggPlotBaseTask(luigi.Task):
@@ -79,7 +79,9 @@ class AggPlotBaseTask(luigi.Task):
         self._ds = ds  # needed for plot title etc
 
         if self.embedding_transform is not None:
-            ds["emb"] = apply_transform(da=ds.emb, transform_type=self.embedding_transform)
+            ds["emb"] = apply_transform(
+                da=ds.emb, transform_type=self.embedding_transform
+            )
 
         scalar_dims = set(ds[self.aux_name].dims)
         ds_stacked = ds.stack(sample=scalar_dims)

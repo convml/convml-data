@@ -9,13 +9,19 @@ from eurec4a_environment.constants import cp_d, g
 from eurec4a_environment.variables import atmos as atmos_variables
 from eurec4a_environment.variables import tropical as tropical_variables
 from eurec4a_environment.variables.utils import apply_by_column
-# from lagtraj.domain.sources.era5.utils import calculate_heights_and_pressures
 
 from ...scene_sources import parse_scene_id
 from . import datasources, utils
 
+# from lagtraj.domain.sources.era5.utils import calculate_heights_and_pressures
+
+
 levels_bl = dict(level=slice(120, None))
 levels_cl = dict(level=slice(101, 120))
+
+
+def calculate_heights_and_pressures(*args, **kwargs):
+    raise NotImplementedError
 
 
 def _get_regular_var(var_name, t, bbox_domain):

@@ -13,8 +13,8 @@ from convml_tt.system import TripletTrainerModel
 from convml_tt.utils import get_embeddings
 from PIL import Image
 
-from ....utils.luigi import XArrayTarget
 from .... import DataSource
+from ....utils.luigi import XArrayTarget
 from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
 from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
 

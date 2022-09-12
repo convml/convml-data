@@ -8,9 +8,9 @@ from pathlib import Path
 import joblib
 import luigi
 import xarray as xr
+from fromconvml_tt.interpretation.embedding_transforms import apply_transform
 
 from ...pipeline import XArrayTarget
-from from convml_tt.interpretation.embedding_transforms import apply_transform
 from .data import AggregateFullDatasetImagePredictionMapData
 
 

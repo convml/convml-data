@@ -19,13 +19,13 @@ import scipy.ndimage.filters
 import xarray as xr
 import xesmf as xe
 
-from . import data_filters, utils
-from ...tiles import SceneTilesData
-from ...embeddings.sampling import TileEmbeddings, model_identifier_from_filename
-from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
-from ...sampling import CropSceneSourceFiles
-from ...utils import SceneBulkProcessingBaseTask
 from ...aux_sources import CheckForAuxiliaryFiles
+from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
+from ...embeddings.sampling import TileEmbeddings, model_identifier_from_filename
+from ...sampling import CropSceneSourceFiles
+from ...tiles import SceneTilesData
+from ...utils import SceneBulkProcessingBaseTask
+from . import data_filters, utils
 
 
 def scale_km_to_m(da_c):
@@ -70,6 +70,7 @@ class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
     Regrid embedding variable onto grid of auxillariary field for a single
     scene and optionally reduce using a given operation per segment
     """
+
     data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
     model_path = luigi.Parameter()
@@ -98,7 +99,7 @@ class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
             scene_id=self.scene_id,
             model_path=self.model_path,
             step_size=self.step_size,
-            prediction_batch_size=self.prediction_batch_size
+            prediction_batch_size=self.prediction_batch_size,
         )
 
         # aux field tasks below
@@ -307,7 +308,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 aux_name=self.aux_name,
                 model_path=self.model_path,
                 step_size=self.step_size,
-                prediction_batch_size=self.prediction_batch_size
+                prediction_batch_size=self.prediction_batch_size,
             )
         else:
             tasks = {}
@@ -323,7 +324,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 tiles_kind=self.tiles_kind,
                 model_path=self.model_path,
                 step_size=self.step_size,
-                prediction_batch_size=self.prediction_batch_size
+                prediction_batch_size=self.prediction_batch_size,
             )
             return tasks
 

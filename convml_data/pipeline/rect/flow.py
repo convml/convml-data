@@ -7,14 +7,13 @@ import numpy as np
 import xarray as xr
 
 from ... import DataSource
+from ...utils.luigi import XArrayTarget
 from .. import (
     GroupedSceneBulkProcessingBaseTask,
     SceneBulkProcessingBaseTask,
     SceneRegriddedData,
     parse_scene_id,
 )
-
-from ...utils.luigi import XArrayTarget
 from ..flow.calc import extract_trajectories
 from ..flow.plot import plot_scene_trajectories
 

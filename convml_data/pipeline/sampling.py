@@ -116,7 +116,7 @@ class CropSceneSourceFiles(luigi.Task):
             task_input=self.input()["data"],
             data_source=source_name,
             product=product,
-            bbox_crop=bbox
+            bbox_crop=bbox,
         )
 
         if source_name == "goes16":

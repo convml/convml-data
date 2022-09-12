@@ -4,8 +4,8 @@ from pathlib import Path
 import luigi
 import requests
 
-from .. import utils
 from ....scene_sources import parse_scene_id
+from .. import utils
 from .ceres_sw_flux import calc_reflected_sw_from_albedo, calc_toa_net_flux
 
 

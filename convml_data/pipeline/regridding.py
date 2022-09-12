@@ -109,8 +109,12 @@ class SceneRegriddedData(_SceneRectSampleBase):
                 # XXX: this wasn't necessary previously and causes extra
                 # computation. Why aren't these variables included when
                 # interpolating?
-                da_domain["lat"] = rc.resample(domain=domain, da=da_src.lat, dx=dx, method=method)
-                da_domain["lon"] = rc.resample(domain=domain, da=da_src.lon, dx=dx, method=method)
+                da_domain["lat"] = rc.resample(
+                    domain=domain, da=da_src.lat, dx=dx, method=method
+                )
+                da_domain["lon"] = rc.resample(
+                    domain=domain, da=da_src.lon, dx=dx, method=method
+                )
 
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
@@ -138,7 +142,7 @@ class SceneRegriddedData(_SceneRectSampleBase):
                 da_scene=da_domain,
                 src_attrs=da_src.attrs,
                 source_name=source_name,
-                product=product
+                product=product,
             )
             img_domain.save(str(domain_output["image"].fn))
 
