@@ -109,8 +109,7 @@ def get_time_for_filename(source_name, filename):
 def extract_variable(task_input, data_source, product, bbox_crop=None):
     if data_source == "ceres":
         _, var_name = product.split("__")
-        ds = task_input.open()
-        da = ds[var_name].rename(longitude="lon", latitude="lat")
+        da = ceres.extract_variable(task_input=task_input, var_name=var_name)
     elif data_source == "goes16":
         if product == "truecolor_rgb":
             if not len(task_input) == 3:
