@@ -123,8 +123,7 @@ class SceneRegriddedData(_SceneRectSampleBase):
 
         if self.aux_name is not None:
             img_domain = self.input()["base"]["image"].open()
-            fig, _ = _plot_scene_aux(da_aux=da_domain, img=img_domain)
-            fig.savefig(domain_output["image"].fn)
+            img_domain.save(domain_output["image"].fn)
         else:
 
             if self.aux_name is None:
