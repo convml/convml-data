@@ -9,6 +9,7 @@ import xarray as xr
 
 from . import plot_types
 from .data import DatasetScenesAuxFieldWithEmbeddings, model_identifier_from_filename
+from convml_tt.interpretation.embedding_transforms import apply_transform
 
 
 class AggPlotBaseTask(luigi.Task):
@@ -17,6 +18,7 @@ class AggPlotBaseTask(luigi.Task):
     tiles_kind = luigi.Parameter()
 
     model_path = luigi.Parameter()
+    embedding_transform = luigi.Parameter(default=None)
     step_size = luigi.IntParameter(default=100)
     prediction_batch_size = luigi.IntParameter(default=32)
 
@@ -37,35 +39,37 @@ class AggPlotBaseTask(luigi.Task):
             model_path=self.model_path,
             step_size=self.step_size,
         )
-        kwargs = dict(
-            scalar_name=self.aux_name,
-            emb_filepath=self.emb_filepath,
-            datapath=self.datapath,
-            column_function=self.column_function,
-            segments_filepath=self.segments_filepath,
-            segmentation_threshold=self.segmentation_threshold,
-            reduce_op=self.reduce_op,
-            filters=self.filters,
-        )
+        # kwargs = dict(
+        #     scalar_name=self.aux_name,
+        #     emb_filepath=self.emb_filepath,
+        #     datapath=self.datapath,
+        #     column_function=self.column_function,
+        #     segments_filepath=self.segments_filepath,
+        #     segmentation_threshold=self.segmentation_threshold,
+        #     reduce_op=self.reduce_op,
+        #     filters=self.filters,
+        # )
 
-        if isinstance(self.scene_ids, list) or isinstance(self.scene_ids, tuple):
-            task = RegridEmbeddingsOnAuxField(scene_ids=list(self.scene_ids), **kwargs)
-        elif self.scene_ids == "available_data":
-            base_task = RegridEmbeddingsOnAuxField(scene_ids=[], **kwargs)
-            scene_ids = []
-            for (scene_id, depd_task) in base_task.requires().items():
-                task_src = depd_task.requires()["data"]
-                if task_src.output().exists():
-                    scene_ids.append(scene_id)
-            if len(scene_ids) == 0:
-                raise Exception(f"No data available for `{self.aux_name}`")
-            task = RegridEmbeddingsOnAuxField(scene_ids=scene_ids, **kwargs)
-        else:
-            raise NotImplementedError(self.scene_ids)
+        # if isinstance(self.scene_ids, list) or isinstance(self.scene_ids, tuple):
+        #     task = RegridEmbeddingsOnAuxField(scene_ids=list(self.scene_ids), **kwargs)
+        # elif self.scene_ids == "available_data":
+        #     base_task = RegridEmbeddingsOnAuxField(scene_ids=[], **kwargs)
+        #     scene_ids = []
+        #     for (scene_id, depd_task) in base_task.requires().items():
+        #         task_src = depd_task.requires()["data"]
+        #         if task_src.output().exists():
+        #             scene_ids.append(scene_id)
+        #     if len(scene_ids) == 0:
+        #         raise Exception(f"No data available for `{self.aux_name}`")
+        #     task = RegridEmbeddingsOnAuxField(scene_ids=scene_ids, **kwargs)
+        # else:
+        #     raise NotImplementedError(self.scene_ids)
 
-        return task
+        # return task
 
     def run(self):
+        # TODO: move aggregation into single dataset and embedding transform
+        # into separate task so that we can reuse the result
         datasets = []
         for scene_id, inp in self.input().items():
             ds_scene = inp.open()
@@ -73,6 +77,9 @@ class AggPlotBaseTask(luigi.Task):
             datasets.append(ds_scene)
         ds = xr.concat(datasets, dim="scene_id")
         self._ds = ds  # needed for plot title etc
+
+        if self.embedding_transform is not None:
+            ds["emb"] = apply_transform(da=ds.emb, transform_type=self.embedding_transform)
 
         scalar_dims = set(ds[self.aux_name].dims)
         ds_stacked = ds.stack(sample=scalar_dims)
@@ -136,8 +143,12 @@ class AggPlotBaseTask(luigi.Task):
             self.aux_name,
             "by",
             emb_name,
-            self.plot_type,
         ]
+
+        if self.embedding_transform is not None:
+            name_parts.append(self.embedding_transform)
+
+        name_parts.append(self.plot_type)
 
         if self.filters is not None:
             name_parts.append(self.filters.replace("=", ""))

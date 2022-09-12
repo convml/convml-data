@@ -1,6 +1,5 @@
 """
-luigi Tasks for putting embedding predictions on a rectangular domain through
-transforms on the embedding dimensions
+luigi Tasks for transforming embedding vectors
 
 NB: currently untested
 """
@@ -10,8 +9,8 @@ import joblib
 import luigi
 import xarray as xr
 
-from ....pipeline import XArrayTarget
-from ...embedding_transforms import apply_transform
+from ...pipeline import XArrayTarget
+from from convml_tt.interpretation.embedding_transforms import apply_transform
 from .data import AggregateFullDatasetImagePredictionMapData
 
 

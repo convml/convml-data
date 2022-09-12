@@ -65,7 +65,7 @@ def regrid_emb_var_onto_variable(da_emb, da_v, method="nearest_s2d"):
     return da_emb_regridded
 
 
-class SceneSlidingWindowEmbeddingsAuxFieldProjection(luigi.Task):
+class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
     """
     Regrid embedding variable onto grid of auxillariary field for a single
     scene and optionally reduce using a given operation per segment
@@ -301,7 +301,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
     def requires(self):
         if self.tiles_kind == "rect-slidingwindow":
-            return SceneSlidingWindowEmbeddingsAuxFieldProjection(
+            return SceneSlidingWindowEmbeddingsAuxFieldRegridding(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 aux_name=self.aux_name,
