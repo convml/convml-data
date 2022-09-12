@@ -84,6 +84,31 @@ possible to define a userfunction which sets up the channels and input
 normalisation for the neural network.
 
 
+### `ceres` source
+
+Fetches GOES-16 CERES products from the SatCORPS team
+
+
+```yaml
+source: ceres
+type: {satellite}__{variable_name}
+```
+
+For example cloud-top temperature from the GOES-16 satellite
+
+```yaml
+source: ceres
+type: goes16n__cloud_top_temperature
+```
+
+Or the top-of-atmosphere net radiation flux (derived from LW-flux and SW albedo)
+
+```yaml
+source: ceres
+type: goes16n__approximate_toa_net_radiation_flux
+```
+
+
 ## The timespan of your data-source
 
 In the `time` section of `meta.yaml` you can define the timespan over which you
