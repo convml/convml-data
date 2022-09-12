@@ -2,7 +2,10 @@ from pathlib import Path
 
 import luigi
 
-from .rect.sampling import DatasetScenesSlidingWindowImageEmbeddings
+from .rect.sampling import (  # noqa
+    DatasetScenesSlidingWindowImageEmbeddings,
+    model_identifier_from_filename,
+)
 
 
 class TileEmbeddings(luigi.Task):
