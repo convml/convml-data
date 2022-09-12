@@ -57,11 +57,18 @@ class SlidingWindowImageEmbeddings(luigi.Task):
             )
 
         tile_dataset = MovingWindowImageTilingDataset(
-            img=img,
+            data_dir=Path(self.image_path).parent,
             transform=model_transforms,
             step=(self.step_size, self.step_size),
             N_tile=N_tile,
         )
+
+        # remove all but the single image we're interested in
+        df_tiles = tile_dataset.df_tiles
+        filename_scene = Path(self.image_path).name
+        df_tiles_scene = df_tiles[df_tiles.scene_filepath == filename_scene]
+        tile_dataset.df_tiles = df_tiles_scene
+
         if len(tile_dataset) == 0:
             raise Exception("The provided tile-dataset doesn't contain any tiles! ")
 
@@ -73,18 +80,14 @@ class SlidingWindowImageEmbeddings(luigi.Task):
 
         if self.src_data_path:
             da_src = xr.open_dataarray(self.src_data_path)
-            da_pred["x"] = xr.DataArray(
-                da_src.x[da_pred.i0], dims=("i0",), attrs=dict(units=da_src["x"].units)
-            )
+            da_pred["x"] = da_src.x.isel(x=da_pred.i0)
             # OBS: j-indexing is positive "down" (from top-left corner) whereas
             # y-indexing is positive "up", so we have to reverse y here before
             # slicing
-            da_pred["y"] = xr.DataArray(
-                da_src.y[::-1][da_pred.j0],
-                dims=("j0",),
-                attrs=dict(units=da_src["y"].units),
-            )
-            da_pred = da_pred.swap_dims(dict(i0="x", j0="y")).sortby(["x", "y"])
+            Ny = len(da_src.y)
+            da_pred["y"] = da_src.y.isel(y=Ny - da_pred.j0)
+
+            da_pred = da_pred.set_index(tile_id=("x", "y")).unstack("tile_id")
             da_pred.attrs["lx_tile"] = float(da_src.x[N_tile[0]] - da_src.x[0])
             da_pred.attrs["ly_tile"] = float(da_src.y[N_tile[1]] - da_src.y[0])
 
