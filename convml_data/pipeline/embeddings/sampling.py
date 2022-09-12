@@ -1,6 +1,10 @@
 import luigi
+from pathlib import Path
 
-from .rect.sampling import DatasetScenesSlidingWindowImageEmbeddings
+from .rect.sampling import (
+    DatasetScenesSlidingWindowImageEmbeddings,
+    model_identifier_from_filename,
+)
 
 
 class TileEmbeddings(luigi.Task):
@@ -13,6 +17,11 @@ class TileEmbeddings(luigi.Task):
     prediction_batch_size = luigi.IntParameter(default=32)
 
     def requires(self):
+        fp_model = Path(self.model)
+        fp_model_expected = Path(self.data_path) / "embedding_models"
+        if not fp_model.parent.absolute() != fp_model_expected.absolute():
+            raise Exception(f"embedding models should be stored in {fp_model_expected}")
+
         if self.tiles_kind == "rect-slidingwindow":
             return DatasetScenesSlidingWindowImageEmbeddings(
                 data_path=self.data_path,

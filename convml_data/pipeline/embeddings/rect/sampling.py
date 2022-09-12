@@ -19,6 +19,10 @@ from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
 from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
 
 
+def model_identifier_from_filename(fn):
+    return fn.replace(".pkl", "").replace(".ckpt", "")
+
+
 class SlidingWindowImageEmbeddings(luigi.Task):
     """
     Make embeddings for a Cartesian 2D image using a specific model skipping
@@ -129,7 +133,7 @@ class SceneSlidingWindowImageEmbeddings(SlidingWindowImageEmbeddings):
 
     def output(self):
         fn = "{}.embeddings.{}_step.nc".format(self.scene_id, self.step_size)
-        model_name = Path(self.model_path).name.replace(".pkl", "").replace(".ckpt", "")
+        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
         p_out = Path(self.data_path) / "embeddings" / "rect" / model_name / fn
         return XArrayTarget(str(p_out))
 

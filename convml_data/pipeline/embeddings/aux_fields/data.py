@@ -21,10 +21,11 @@ import xesmf as xe
 
 from . import data_filters, utils
 from ...tiles import SceneTilesData
-from ...embeddings.sampling import TileEmbeddings
+from ...embeddings.sampling import TileEmbeddings, model_identifier_from_filename
 from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
 from ...sampling import CropSceneSourceFiles
 from ...utils import SceneBulkProcessingBaseTask
+from ...aux_sources import CheckForAuxiliaryFiles
 
 
 def scale_km_to_m(da_c):
@@ -260,7 +261,8 @@ class SceneSlidingWindowEmbeddingsAuxFieldProjection(luigi.Task):
         return da_scalar
 
     def output(self):
-        emb_name = f"{self.model_path}.{self.step_size}"
+        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
+        emb_name = f"{model_name}.{self.step_size}"
 
         name_parts = [
             self.scene_id,
@@ -281,7 +283,7 @@ class SceneSlidingWindowEmbeddingsAuxFieldProjection(luigi.Task):
 
         fn = ".".join(name_parts) + ".nc"
 
-        p = Path(self.data_path) / "embeddings_with_aux" / fn
+        p = Path(self.data_path) / "embeddings" / "with_aux" / fn
         return utils.XArrayTarget(str(p))
 
 
@@ -338,113 +340,27 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             raise NotImplementedError(self.tiles_kind)
 
 
-class DatasetSceneAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
-    data_path = luigi.Parameter(default=".")
+class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
     TaskClass = SceneAuxFieldWithEmbeddings
+    SceneIDsTaskClass = CheckForAuxiliaryFiles
 
+    aux_name = luigi.OptionalParameter()
+    tiles_kind = luigi.Parameter()
 
-    def _output(self):
-        emb_name = Path(self.emb_filepath).name.replace(".nc", "")
+    model_path = luigi.Parameter()
+    step_size = luigi.IntParameter(default=100)
+    prediction_batch_size = luigi.IntParameter(default=32)
 
-        name_parts = [
-            self.scalar_name,
-            "regridded",
-        ]
+    data_path = luigi.Parameter(default=".")
+    crop_pad_ptc = luigi.FloatParameter(default=0.1)
 
-        if self.filters is not None:
-            name_parts.append(self.filters.replace("=", ""))
+    def _get_task_class_kwargs(self, scene_ids):
+        return dict(
+            aux_name=self.aux_name,
+            tiles_kind=self.tiles_kind,
+            model_path=self.model_path,
+            step_size=self.step_size,
+        )
 
-        if self.column_function is not None:
-            name_parts.append(self.column_function)
-
-        if self.segments_filepath is not None:
-            name_parts.append(f"{self.segmentation_threshold}seg")
-
-        if self.segments_filepath is not None or self.column_function is not None:
-            name_parts.append(self.reduce_op)
-
-        identifier = ".".join(name_parts)
-        fn = f"{identifier}.nc"
-
-        p = Path(self.data_path) / emb_name / fn
-        return utils.XArrayTarget(str(p))
-
-
-class RegridEmbeddingsOnAuxField(luigi.Task):
-    scalar_name = luigi.Parameter()
-    scene_ids = luigi.ListParameter(default=[])
-    emb_filepath = luigi.Parameter()
-    data_path = luigi.Parameter()
-
-    column_function = luigi.Parameter(default=None)
-    segments_filepath = luigi.Parameter(default=None)
-    segmentation_threshold = luigi.FloatParameter(default=0.0005)
-    reduce_op = luigi.Parameter(default="mean")
-
-    filters = luigi.OptionalParameter(default=None)
-
-    def requires(self):
-        if len(self.scene_ids) == 0:
-            da_emb_src = xr.open_dataarray(self.emb_filepath)
-            scene_ids = da_emb_src.scene_id.values
-        else:
-            scene_ids = self.scene_ids
-
-        return {
-            scene_id: SceneSlidingWindowEmbeddingsAuxProjection(
-                scene_id=scene_id,
-                scalar_name=self.scalar_name,
-                emb_filepath=self.emb_filepath,
-                column_function=self.column_function,
-                segments_filepath=self.segments_filepath,
-                segmentation_threshold=self.segmentation_threshold,
-                # n_scalar_bins=self.n_scalar_bins,
-                reduce_op=self.reduce_op,
-                data_path=self.data_path,
-                filters=self.filters,
-            )
-            for scene_id in scene_ids
-        }
-
-    def run(self):
-        das = [inp.open() for inp in self.input().values()]
-
-        # concat_dim = None
-        # for d in ["time", "scene_id"]:
-        # if d in das[0].dims:
-        # concat_dim = d
-
-        # if d is None:
-        # raise Exception("Not sure what dimension to concat on")
-
-        concat_dim = "scene_id"
-        ds = xr.concat(das, dim=concat_dim)
-
-        Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
-        ds.to_netcdf(self.output().fn)
-
-    def output(self):
-        emb_name = Path(self.emb_filepath).name.replace(".nc", "")
-
-        name_parts = [
-            self.scalar_name,
-            "regridded",
-        ]
-
-        if self.filters is not None:
-            name_parts.append(self.filters.replace("=", ""))
-
-        if self.column_function is not None:
-            name_parts.append(self.column_function)
-
-        if self.segments_filepath is not None:
-            name_parts.append(f"{self.segmentation_threshold}seg")
-
-        if self.segments_filepath is not None or self.column_function is not None:
-            name_parts.append(self.reduce_op)
-
-        identifier = ".".join(name_parts)
-        fn = f"{identifier}.nc"
-
-        p = Path(self.data_path) / emb_name / fn
-        return utils.XArrayTarget(str(p))
+    def _get_scene_ids_task_kwargs(self):
+        return dict(aux_name=self.aux_name)
