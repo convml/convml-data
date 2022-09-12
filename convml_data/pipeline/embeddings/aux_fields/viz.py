@@ -139,7 +139,8 @@ class AggPlotBaseTask(luigi.Task):
         return title  # "\n".join(textwrap.wrap(text=title, width=40))
 
     def _build_output_name_parts(self):
-        emb_name = model_identifier_from_filename(fn=Path(self.model_path).name)
+        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
+        emb_name = f"{model_name}.step_{self.step_size}"
 
         name_parts = [
             self.aux_name,

@@ -20,7 +20,7 @@ from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
 
 
 def model_identifier_from_filename(fn):
-    return fn.replace(".pkl", "").replace(".ckpt", "")
+    return fn.replace(".torch.pkl", "").replace(".ckpt", "")
 
 
 class SlidingWindowImageEmbeddings(luigi.Task):
