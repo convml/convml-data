@@ -464,7 +464,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
                 fp_transform_model = Path(self.embedding_model_path).parent / fn
                 joblib.dump(transform_model, fp_transform_model)
 
-        ds.to_netcdf(self.output().path)
+        self.output().save(ds)
 
     def output(self):
         emb_name = make_embedding_name(
@@ -495,4 +495,5 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
 
         p = Path(self.data_path) / "embeddings" / "with_aux" / fn
 
+        return utils.XArrayZarrTarget(p.parent, ".".join(name_parts))
         return utils.XArrayTarget(str(p))
