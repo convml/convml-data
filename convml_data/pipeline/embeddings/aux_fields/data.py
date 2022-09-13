@@ -12,6 +12,7 @@ auxiliary scalar field. There are a few ways this co-location is done:
 """
 from pathlib import Path
 
+import joblib
 import luigi
 import numpy as np
 import regridcart as rc
@@ -21,7 +22,10 @@ import xesmf as xe
 from convml_tt.interpretation.embedding_transforms import apply_transform
 
 from ...aux_sources import CheckForAuxiliaryFiles
-from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
+from ...embeddings.rect.sampling import (
+    SceneSlidingWindowImageEmbeddings,
+    make_embedding_name,
+)
 from ...embeddings.sampling import TileEmbeddings, model_identifier_from_filename
 from ...sampling import CropSceneSourceFiles
 from ...tiles import SceneTilesData
@@ -29,26 +33,18 @@ from ...utils import SceneBulkProcessingBaseTask
 from . import data_filters, utils
 
 
-def make_embedding_name(model_path, model_args, transform=None, transform_args={}):
-    skip_args = ["prediction_batch_size"]
+def make_transform_name(transform, transform_args={}):
     skip_transform_args = []
-
     name_parts = [
-        model_identifier_from_filename(Path(model_path).name),
+        transform,
     ]
 
-    name_parts += [f"{k}__{v}" for (k, v) in model_args.items() if k not in skip_args]
-
-    if transform is not None:
-        name_parts.append(transform)
-
-        if len(transform_args) > 0:
-            name_parts += [
-                f"{k}__{v}"
-                for (k, v) in transform_args.items()
-                if k not in skip_transform_args
-            ]
-
+    if len(transform_args) > 0:
+        name_parts += [
+            f"{k}__{v}"
+            for (k, v) in transform_args.items()
+            if k not in skip_transform_args
+        ]
     return ".".join(name_parts)
 
 
@@ -395,6 +391,11 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
 
 
 class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
+    """
+    Combine across all scenes in a dataset the embeddings and aux-field values
+    into a single file. Also, optionally apply an embedding transform
+    """
+
     aux_name = luigi.Parameter()
     scene_ids = luigi.OptionalParameter(default=[])
     tiles_kind = luigi.Parameter()
@@ -429,20 +430,42 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
             ds = xr.concat(datasets, dim="scene_id")
         else:
             ds = self.input().open()
-            ds["emb"] = apply_transform(
+            transform_model_args = dict(self.embedding_transform_args)
+
+            if "pretrained_model_path" in transform_model_args:
+                fp_pretrained_model = transform_model_args.pop("pretrained_model_path")
+                transform_model_args["pretrained_model"] = joblib.load(
+                    fp_pretrained_model
+                )
+
+            ds["emb"], transform_model = apply_transform(
                 da=ds.emb,
                 transform_type=self.embedding_transform,
-                **self.embedding_model_args,
+                return_model=True,
+                **transform_model_args,
             )
+
+            if "pretrained_model" not in transform_model_args:
+                emb_model_name = make_embedding_name(
+                    kind=self.tiles_kind,
+                    model_path=self.embedding_model_path,
+                    model_args=self.embedding_model_args,
+                )
+                transform_name = make_transform_name(
+                    transform=self.embedding_transform,
+                    transform_args=self.embedding_transform_args,
+                )
+                fn = f"{emb_model_name}.{transform_name}.joblib"
+                fp_transform_model = Path(self.embedding_model_path).parent / fn
+                joblib.dump(transform_model, fp_transform_model)
 
         ds.to_netcdf(self.output().path)
 
     def output(self):
         emb_name = make_embedding_name(
+            kind=self.tiles_kind,
             model_path=self.embedding_model_path,
             model_args=self.embedding_model_args,
-            transform=self.embedding_transform,
-            transform_args=self.embedding_transform_args,
         )
 
         name_parts = [
@@ -453,9 +476,14 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
         ]
 
         if self.embedding_transform is not None:
-            name_parts.append(self.embedding_transform)
+            transform_name = make_transform_name(
+                transform=self.embedding_transform,
+                transform_args=self.embedding_transform_args,
+            )
+            name_parts.append(transform_name)
 
         fn = ".".join(name_parts) + ".nc"
 
         p = Path(self.data_path) / "embeddings" / "with_aux" / fn
+
         return utils.XArrayTarget(str(p))

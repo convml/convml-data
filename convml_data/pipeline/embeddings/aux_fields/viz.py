@@ -8,7 +8,11 @@ import seaborn as sns
 import xarray as xr
 
 from . import plot_types
-from .data import AggregatedDatasetScenesAuxFieldWithEmbeddings, make_embedding_name
+from .data import (
+    AggregatedDatasetScenesAuxFieldWithEmbeddings,
+    make_embedding_name,
+    make_transform_name,
+)
 
 
 class AggPlotBaseTask(luigi.Task):
@@ -95,11 +99,16 @@ class AggPlotBaseTask(luigi.Task):
     def _make_title(self):
         ds = self._ds
         emb_name = make_embedding_name(
+            kind=self.tiles_kind,
             model_path=self.embedding_model_path,
             model_args=self.embedding_model_args,
-            transform=self.embedding_transform,
-            transform_args=self.embedding_transform_args,
         )
+
+        if self.embedding_transform is not None:
+            emb_name += "." + make_transform_name(
+                transform=self.embedding_transform,
+                transform_args=self.embedding_transform_args,
+            )
 
         dataset_name = Path(self.datapath).absolute().stem
         title_parts = [
@@ -135,17 +144,18 @@ class AggPlotBaseTask(luigi.Task):
 
     def _build_output_name_parts(self):
         emb_name = make_embedding_name(
+            kind=self.tiles_kind,
             model_path=self.embedding_model_path,
             model_args=self.embedding_model_args,
-            transform=self.embedding_transform,
-            transform_args=self.embedding_transform_args,
         )
+        name_parts = [self.aux_name, "by", emb_name]
 
-        name_parts = [
-            self.aux_name,
-            "by",
-            emb_name,
-        ]
+        if self.embedding_transform is not None:
+            transform_name = make_transform_name(
+                transform=self.embedding_transform,
+                transform_args=self.embedding_transform_args,
+            )
+            name_parts.append(transform_name)
 
         name_parts.append(self.plot_type)
 
