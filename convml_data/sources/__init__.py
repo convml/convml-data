@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from . import ceres, goes16
+from . import ceres, era5, goes16
 from . import images as source_images
 from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .les import FindLESFiles, LESDataFile
@@ -53,10 +53,17 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
             source_variable=source_variable,
             filename_glob=filename_glob,
         )
-    elif source_name == "ceres":
+    elif source_name in ["ceres", "era5"]:
+        if source_name == "ceres":
+            QueryTaskClass = ceres.pipeline.QueryForData
+        elif source_name == "era5":
+            QueryTaskClass = era5.pipeline.ERA5Query
+        else:
+            raise NotImplementedError(source_name)
+
         tasks = []
         for t_start, t_end in time_intervals:
-            t = ceres.pipeline.QueryForData(
+            t = QueryTaskClass(
                 data_path=source_data_path,
                 t_start=t_start,
                 t_end=t_end,

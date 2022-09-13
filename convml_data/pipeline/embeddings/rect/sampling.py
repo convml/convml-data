@@ -128,11 +128,11 @@ class SceneSlidingWindowImageEmbeddings(SlidingWindowImageEmbeddings):
 
     @property
     def image_path(self):
-        return self.input()["image"].fn
+        return self.input()["image"].path
 
     @property
     def src_data_path(self):
-        return self.input()["data"].fn
+        return self.input()["data"].path
 
     def output(self):
         fn = "{}.embeddings.{}_step.nc".format(self.scene_id, self.step_size)
@@ -212,8 +212,8 @@ class DatasetScenesSlidingWindowImagesAndEmbedddings(luigi.Task):
         da_all.attrs["step_size"] = self.step_size
         da_all.attrs["model_path"] = self.model_path
 
-        Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
-        da_all.to_netcdf(self.output().fn)
+        Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
+        da_all.to_netcdf(self.output().path)
 
     def output(self):
         model_name = Path(self.model_path).name.replace(".pkl", "").replace(".ckpt", "")
