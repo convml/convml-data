@@ -432,8 +432,13 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
             ds = self.input().open()
             transform_model_args = dict(self.embedding_transform_args)
 
-            if "pretrained_model_path" in transform_model_args:
-                fp_pretrained_model = transform_model_args.pop("pretrained_model_path")
+            if "pretrained_model" in transform_model_args:
+                fp_pretrained_model = (
+                    Path(self.data_path)
+                    / "embeddings"
+                    / "models"
+                    / "{}.joblib".format(transform_model_args.pop("pretrained_model"))
+                )
                 transform_model_args["pretrained_model"] = joblib.load(
                     fp_pretrained_model
                 )
@@ -476,10 +481,14 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
         ]
 
         if self.embedding_transform is not None:
-            transform_name = make_transform_name(
-                transform=self.embedding_transform,
-                transform_args=self.embedding_transform_args,
-            )
+            transform_model_args = dict(self.embedding_transform_args)
+            if "pretrained_model" in transform_model_args:
+                transform_name = transform_model_args["pretrained_model"]
+            else:
+                transform_name = make_transform_name(
+                    transform=self.embedding_transform,
+                    transform_args=self.embedding_transform_args,
+                )
             name_parts.append(transform_name)
 
         fn = ".".join(name_parts) + ".nc"
