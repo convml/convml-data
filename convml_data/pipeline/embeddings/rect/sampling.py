@@ -5,13 +5,11 @@ whole dataset
 from pathlib import Path
 
 import luigi
-import numpy as np
 import xarray as xr
 from convml_tt.data.dataset import MovingWindowImageTilingDataset
 from convml_tt.data.transforms import get_transforms as get_model_transforms
 from convml_tt.system import TripletTrainerModel
 from convml_tt.utils import get_embeddings
-from PIL import Image
 
 from .... import DataSource
 from ....utils.luigi import XArrayTarget
@@ -41,20 +39,10 @@ class SlidingWindowImageEmbeddings(luigi.Task):
         model = TripletTrainerModel.load_from_checkpoint(self.model_path)
         model.freeze()
 
-        img = Image.open(self.image_path)
-
         N_tile = (256, 256)
         model_transforms = get_model_transforms(
             step="predict", normalize_for_arch=model.base_arch
         )
-        ny_img, nx_img, _ = np.array(img).shape
-        if nx_img < N_tile[0] or ny_img < N_tile[1]:
-            raise Exception(
-                "The requested scene image has too few pixels to contain "
-                f"even a single tile (img size: {nx_img, ny_img} "
-                f"vs tile size: {N_tile[0], N_tile[1]}), maybe the resolution "
-                "is too coarse?"
-            )
 
         tile_dataset = MovingWindowImageTilingDataset(
             data_dir=Path(self.image_path).parent,

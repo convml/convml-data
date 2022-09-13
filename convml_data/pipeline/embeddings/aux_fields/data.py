@@ -29,6 +29,29 @@ from ...utils import SceneBulkProcessingBaseTask
 from . import data_filters, utils
 
 
+def make_embedding_name(model_path, model_args, transform=None, transform_args={}):
+    skip_args = ["prediction_batch_size"]
+    skip_transform_args = []
+
+    name_parts = [
+        model_identifier_from_filename(Path(model_path).name),
+    ]
+
+    name_parts += [f"{k}__{v}" for (k, v) in model_args.items() if k not in skip_args]
+
+    if transform is not None:
+        name_parts.append(transform)
+
+        if len(transform_args) > 0:
+            name_parts += [
+                f"{k}__{v}"
+                for (k, v) in transform_args.items()
+                if k not in skip_transform_args
+            ]
+
+    return ".".join(name_parts)
+
+
 def scale_km_to_m(da_c):
     assert da_c.units == "km"
     da_c = 1000 * da_c
@@ -294,22 +317,26 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    model_path = luigi.Parameter()
-    step_size = luigi.IntParameter(default=100)
-    prediction_batch_size = luigi.IntParameter(default=32)
+    embedding_model_path = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
 
     def requires(self):
+        prediction_batch_size = self.embedding_model_args.get(
+            "prediction_batch_size", 32
+        )
+        step_size = self.embedding_model_args.get("step_size", 100)
+
         if self.tiles_kind == "rect-slidingwindow":
             return SceneSlidingWindowEmbeddingsAuxFieldRegridding(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 aux_name=self.aux_name,
-                model_path=self.model_path,
-                step_size=self.step_size,
-                prediction_batch_size=self.prediction_batch_size,
+                model_path=self.embedding_model_path,
+                step_size=step_size,
+                prediction_batch_size=prediction_batch_size,
             )
         else:
             tasks = {}
@@ -323,9 +350,9 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 tiles_kind=self.tiles_kind,
-                model_path=self.model_path,
-                step_size=self.step_size,
-                prediction_batch_size=self.prediction_batch_size,
+                model_path=self.embedding_model_path,
+                step_size=step_size,
+                prediction_batch_size=prediction_batch_size,
             )
             return tasks
 
@@ -349,9 +376,8 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
     aux_name = luigi.OptionalParameter()
     tiles_kind = luigi.Parameter()
 
-    model_path = luigi.Parameter()
-    step_size = luigi.IntParameter(default=100)
-    prediction_batch_size = luigi.IntParameter(default=32)
+    embedding_model_path = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
@@ -360,8 +386,8 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
         return dict(
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            model_path=self.model_path,
-            step_size=self.step_size,
+            embedding_model_path=self.embedding_model_path,
+            embedding_model_args=self.embedding_model_args,
         )
 
     def _get_scene_ids_task_kwargs(self):
@@ -373,10 +399,10 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
     scene_ids = luigi.OptionalParameter(default=[])
     tiles_kind = luigi.Parameter()
 
-    model_path = luigi.Parameter()
+    embedding_model_path = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
     embedding_transform = luigi.Parameter(default=None)
-    step_size = luigi.IntParameter(default=100)
-    prediction_batch_size = luigi.IntParameter(default=32)
+    embedding_transform_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
 
@@ -385,9 +411,8 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
             data_path=self.data_path,
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            model_path=self.model_path,
-            step_size=self.step_size,
-            prediction_batch_size=self.prediction_batch_size,
+            embedding_model_path=self.embedding_model_path,
+            embedding_model_args=self.embedding_model_args,
         )
         if self.embedding_transform is None:
             return DatasetScenesAuxFieldWithEmbeddings(**kwargs)
@@ -405,14 +430,20 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
         else:
             ds = self.input().open()
             ds["emb"] = apply_transform(
-                da=ds.emb, transform_type=self.embedding_transform
+                da=ds.emb,
+                transform_type=self.embedding_transform,
+                **self.embedding_model_args,
             )
 
         ds.to_netcdf(self.output().path)
 
     def output(self):
-        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
-        emb_name = f"{model_name}.{self.step_size}"
+        emb_name = make_embedding_name(
+            model_path=self.embedding_model_path,
+            model_args=self.embedding_model_args,
+            transform=self.embedding_transform,
+            transform_args=self.embedding_transform_args,
+        )
 
         name_parts = [
             "__all__",

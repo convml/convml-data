@@ -8,10 +8,7 @@ import seaborn as sns
 import xarray as xr
 
 from . import plot_types
-from .data import (
-    AggregatedDatasetScenesAuxFieldWithEmbeddings,
-    model_identifier_from_filename,
-)
+from .data import AggregatedDatasetScenesAuxFieldWithEmbeddings, make_embedding_name
 
 
 class AggPlotBaseTask(luigi.Task):
@@ -19,10 +16,10 @@ class AggPlotBaseTask(luigi.Task):
     scene_ids = luigi.OptionalParameter(default=[])
     tiles_kind = luigi.Parameter()
 
-    model_path = luigi.Parameter()
+    embedding_model_path = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
     embedding_transform = luigi.Parameter(default=None)
-    step_size = luigi.IntParameter(default=100)
-    prediction_batch_size = luigi.IntParameter(default=32)
+    embedding_transform_args = luigi.DictParameter(default={})
 
     datapath = luigi.Parameter(default=".")
     column_function = luigi.Parameter(default=None)
@@ -38,10 +35,10 @@ class AggPlotBaseTask(luigi.Task):
         return AggregatedDatasetScenesAuxFieldWithEmbeddings(
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            model_path=self.model_path,
-            step_size=self.step_size,
+            embedding_model_path=self.embedding_model_path,
+            embedding_model_args=self.embedding_model_args,
             embedding_transform=self.embedding_transform,
-            prediction_batch_size=self.prediction_batch_size,
+            embedding_transform_args=self.embedding_transform_args,
         )
         # kwargs = dict(
         #     scalar_name=self.aux_name,
@@ -97,7 +94,13 @@ class AggPlotBaseTask(luigi.Task):
 
     def _make_title(self):
         ds = self._ds
-        emb_name = model_identifier_from_filename(Path(self.model_path).name)
+        emb_name = make_embedding_name(
+            model_path=self.embedding_model_path,
+            model_args=self.embedding_model_args,
+            transform=self.embedding_transform,
+            transform_args=self.embedding_transform_args,
+        )
+
         dataset_name = Path(self.datapath).absolute().stem
         title_parts = [
             f"{int(ds.scene_id.count())} scenes",
@@ -131,17 +134,18 @@ class AggPlotBaseTask(luigi.Task):
         return title  # "\n".join(textwrap.wrap(text=title, width=40))
 
     def _build_output_name_parts(self):
-        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
-        emb_name = f"{model_name}.step_{self.step_size}"
+        emb_name = make_embedding_name(
+            model_path=self.embedding_model_path,
+            model_args=self.embedding_model_args,
+            transform=self.embedding_transform,
+            transform_args=self.embedding_transform_args,
+        )
 
         name_parts = [
             self.aux_name,
             "by",
             emb_name,
         ]
-
-        if self.embedding_transform is not None:
-            name_parts.append(self.embedding_transform)
 
         name_parts.append(self.plot_type)
 
