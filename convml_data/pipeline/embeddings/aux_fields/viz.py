@@ -6,10 +6,12 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import xarray as xr
-from convml_tt.interpretation.embedding_transforms import apply_transform
 
 from . import plot_types
-from .data import DatasetScenesAuxFieldWithEmbeddings, model_identifier_from_filename
+from .data import (
+    AggregatedDatasetScenesAuxFieldWithEmbeddings,
+    model_identifier_from_filename,
+)
 
 
 class AggPlotBaseTask(luigi.Task):
@@ -33,11 +35,13 @@ class AggPlotBaseTask(luigi.Task):
     filetype = luigi.Parameter(default="png")
 
     def requires(self):
-        return DatasetScenesAuxFieldWithEmbeddings(
+        return AggregatedDatasetScenesAuxFieldWithEmbeddings(
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
             model_path=self.model_path,
             step_size=self.step_size,
+            embedding_transform=self.embedding_transform,
+            prediction_batch_size=self.prediction_batch_size,
         )
         # kwargs = dict(
         #     scalar_name=self.aux_name,
@@ -68,20 +72,8 @@ class AggPlotBaseTask(luigi.Task):
         # return task
 
     def run(self):
-        # TODO: move aggregation into single dataset and embedding transform
-        # into separate task so that we can reuse the result
-        datasets = []
-        for scene_id, inp in self.input().items():
-            ds_scene = inp.open()
-            ds_scene["scene_id"] = scene_id
-            datasets.append(ds_scene)
-        ds = xr.concat(datasets, dim="scene_id")
-        self._ds = ds  # needed for plot title etc
-
-        if self.embedding_transform is not None:
-            ds["emb"] = apply_transform(
-                da=ds.emb, transform_type=self.embedding_transform
-            )
+        ds = self.input().open()
+        self._ds = ds  # for plot titles etc
 
         scalar_dims = set(ds[self.aux_name].dims)
         ds_stacked = ds.stack(sample=scalar_dims)

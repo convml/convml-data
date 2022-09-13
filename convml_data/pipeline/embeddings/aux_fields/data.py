@@ -18,6 +18,7 @@ import regridcart as rc
 import scipy.ndimage.filters
 import xarray as xr
 import xesmf as xe
+from convml_tt.interpretation.embedding_transforms import apply_transform
 
 from ...aux_sources import CheckForAuxiliaryFiles
 from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
@@ -365,3 +366,65 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
 
     def _get_scene_ids_task_kwargs(self):
         return dict(aux_name=self.aux_name)
+
+
+class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
+    aux_name = luigi.Parameter()
+    scene_ids = luigi.OptionalParameter(default=[])
+    tiles_kind = luigi.Parameter()
+
+    model_path = luigi.Parameter()
+    embedding_transform = luigi.Parameter(default=None)
+    step_size = luigi.IntParameter(default=100)
+    prediction_batch_size = luigi.IntParameter(default=32)
+
+    data_path = luigi.Parameter(default=".")
+
+    def requires(self):
+        kwargs = dict(
+            data_path=self.data_path,
+            aux_name=self.aux_name,
+            tiles_kind=self.tiles_kind,
+            model_path=self.model_path,
+            step_size=self.step_size,
+            prediction_batch_size=self.prediction_batch_size,
+        )
+        if self.embedding_transform is None:
+            return DatasetScenesAuxFieldWithEmbeddings(**kwargs)
+
+        return AggregatedDatasetScenesAuxFieldWithEmbeddings(**kwargs)
+
+    def run(self):
+        if self.embedding_transform is None:
+            datasets = []
+            for scene_id, inp in self.input().items():
+                ds_scene = inp.open()
+                ds_scene["scene_id"] = scene_id
+                datasets.append(ds_scene)
+            ds = xr.concat(datasets, dim="scene_id")
+        else:
+            ds = self.input().open()
+            ds["emb"] = apply_transform(
+                da=ds.emb, transform_type=self.embedding_transform
+            )
+
+        ds.to_netcdf(self.output().path)
+
+    def output(self):
+        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
+        emb_name = f"{model_name}.{self.step_size}"
+
+        name_parts = [
+            "__all__",
+            self.aux_name,
+            "by",
+            emb_name,
+        ]
+
+        if self.embedding_transform is not None:
+            name_parts.append(self.embedding_transform)
+
+        fn = ".".join(name_parts) + ".nc"
+
+        p = Path(self.data_path) / "embeddings" / "with_aux" / fn
+        return utils.XArrayTarget(str(p))
