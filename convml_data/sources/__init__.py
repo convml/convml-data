@@ -93,6 +93,11 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
             filename=scene_source_files,
             data_path=Path(source_data_path) / "raw",
         )
+    elif source_name == "era5":
+        task = era5.pipeline.ERA5Fetch(
+            filename=scene_source_files,
+            data_path=Path(source_data_path) / "raw",
+        )
     else:
         raise NotImplementedError(source_name)
 
@@ -107,6 +112,8 @@ def get_time_for_filename(source_name, filename):
         t = FindLESFiles.get_time(filename=filename)
     elif source_name == "ceres":
         t = ceres.pipeline.QueryForData.get_time(filename=filename)
+    elif source_name == "era5":
+        t = era5.pipeline.ERA5Query.get_time(filename=filename)
     else:
         raise NotImplementedError(source_name)
 
@@ -174,6 +181,8 @@ def extract_variable(task_input, data_source, product, bbox_crop=None):
         ds_input = task_input.open()
         var_name = product
         da = ds_input[var_name]
+    elif data_source == "era5":
+        da = task_input.open().rename(dict(longitude="lon", latitude="lat"))
     else:
         raise NotImplementedError(data_source)
 

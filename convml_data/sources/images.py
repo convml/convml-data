@@ -92,10 +92,16 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
         else:
             raise NotImplementedError(product)
     else:
-        img_data = da_scene.data
+        if len(da_scene.squeeze().data.shape) == 2:
+            da_rgba = make_rgb(
+                da=da_scene.squeeze().expand_dims("foo"), alpha=1.0, foo=[0, 0, 0]
+            )
+            img_data = da_rgba.transpose("lon", "lat", "rgba").data
+        else:
+            img_data = da_scene.data
         v_min, v_max = np.nanmin(img_data), np.nanmax(img_data)
         img_data = 1.0 - (img_data - v_min) / (v_max - v_min)
         img_data = (img_data * 255).astype(np.uint8)
-        img_domain = Image.fromarray(img_data)
+        img_domain = Image.fromarray(img_data, "RGB")
 
     return img_domain

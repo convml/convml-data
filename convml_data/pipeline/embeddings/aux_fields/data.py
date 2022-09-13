@@ -491,9 +491,6 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
                 )
             name_parts.append(transform_name)
 
-        fn = ".".join(name_parts) + ".nc"
-
-        p = Path(self.data_path) / "embeddings" / "with_aux" / fn
-
-        return utils.XArrayZarrTarget(p.parent, ".".join(name_parts))
-        return utils.XArrayTarget(str(p))
+        name = ".".join(name_parts)
+        p = Path(self.data_path) / "embeddings" / "with_aux"
+        return utils.XArrayZarrTarget(p, name)
