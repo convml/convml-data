@@ -350,17 +350,22 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             aux_fields = self.input()["aux"]
             da_embs = self.input()["embeddings"].open()
 
-            values = []
-            for triplet_tile_id in da_embs.triplet_tile_id.values:
-                da_tile_aux = aux_fields[triplet_tile_id]["data"].open()
-                da_tile_aux_value = da_tile_aux.mean(keep_attrs=True)
-                da_tile_aux_value.attrs["long_name"] = (
-                    "tile mean " + da_tile_aux_value.long_name
-                )
-                da_tile_aux_value["triplet_tile_id"] = triplet_tile_id
-                values.append(da_tile_aux_value)
-            da_aux_values = xr.concat(values, dim="triplet_tile_id")
-            ds = xr.merge([da_embs, da_aux_values])
+            if da_embs.count() == 0:
+                ds = xr.Dataset()
+            else:
+                values = []
+                for triplet_tile_id in da_embs.triplet_tile_id.values:
+                    da_tile_aux = aux_fields[triplet_tile_id]["data"].open()
+                    da_tile_aux_value = da_tile_aux.mean(keep_attrs=True)
+                    da_tile_aux_value.attrs["long_name"] = (
+                        "tile mean " + da_tile_aux_value.long_name
+                    )
+                    da_tile_aux_value["triplet_tile_id"] = triplet_tile_id
+                    values.append(da_tile_aux_value)
+
+                da_aux_values = xr.concat(values, dim="triplet_tile_id")
+                ds = xr.merge([da_embs, da_aux_values])
+
             Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
             ds.to_netcdf(self.output().path)
         else:
@@ -373,7 +378,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_path=self.embedding_model_path,
-            **self.embedding_model_args,
+            **dict(self.embedding_model_args),
         )
 
         name_parts = [
@@ -456,9 +461,17 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
 
             for scene_id, inp in self.input().items():
                 ds_scene = inp.open()
+                if len(ds_scene.data_vars) == 0:
+                    # no tiles in this scene
+                    continue
+
                 ds_scene["scene_id"] = scene_id
+                stage = ds_scene.attrs["stage"]
                 datasets.append(ds_scene)
+                ds_scene["stage"] = stage
+
             ds = xr.concat(datasets, dim=concat_dim)
+            ds = ds.set_coords(["stage", "scene_id"])
         else:
             ds = self.input().open()
             transform_model_args = dict(self.embedding_transform_args)
@@ -468,22 +481,19 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
                     Path(self.data_path)
                     / "embeddings"
                     / "models"
-                    / "{}.joblib".format(transform_model_args.pop("pretrained_model"))
+                    / f"{transform_model_args.pop('pretrained_model')}.joblib"
                 )
                 transform_model_args["pretrained_model"] = joblib.load(
                     fp_pretrained_model
                 )
 
-            import ipdb
-
-            ipdb.set_trace()
-
-            ds["emb"], transform_model = apply_transform(
+            da_emb, transform_model = apply_transform(
                 da=ds.emb,
                 transform_type=self.embedding_transform,
                 return_model=True,
                 **transform_model_args,
             )
+            ds[da_emb.name] = da_emb
 
             if "pretrained_model" not in transform_model_args:
                 emb_model_name = make_embedding_name(
@@ -499,13 +509,13 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
                 fp_transform_model = Path(self.embedding_model_path).parent / fn
                 joblib.dump(transform_model, fp_transform_model)
 
-        self.output().save(ds)
+        ds.to_netcdf(self.output().path)
 
     def output(self):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_path=self.embedding_model_path,
-            model_args=self.embedding_model_args,
+            **self.embedding_model_args,
         )
 
         name_parts = [
@@ -528,4 +538,4 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
 
         name = ".".join(name_parts)
         p = Path(self.data_path) / "embeddings" / "with_aux"
-        return utils.XArrayZarrTarget(p, name)
+        return utils.XArrayTarget(str(p / (name + ".nc")))

@@ -79,10 +79,7 @@ class AggPlotBaseTask(luigi.Task):
         scalar_dims = set(ds[self.aux_name].dims)
         ds_stacked = ds.stack(sample=scalar_dims)
 
-        # the "embedding variable" is the one in the dataset which isn't the aux variable
-        different_vars = set(ds.data_vars.keys()).difference({self.aux_name})
-        assert len(different_vars) == 1
-        emb_var = different_vars.pop()
+        emb_var = "emb"
         emb_dim = set(ds.dims).difference(set(ds[self.aux_name].dims)).pop()
 
         # remove `explained_variance` since merging into a pandas DataFrame

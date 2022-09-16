@@ -49,14 +49,16 @@ class _SceneTileEmbeddingsBase(luigi.Task):
 
         tile_dataset = self._get_tile_dataset(model_transforms=model_transforms)
         if len(tile_dataset) == 0:
-            raise Exception("The provided tile-dataset doesn't contain any tiles! ")
+            da_pred = xr.DataArray()
+        else:
 
-        da_pred = get_embeddings(
-            model=model,
-            tile_dataset=tile_dataset,
-            prediction_batch_size=self.prediction_batch_size,
-        )
-        da_pred["triplet_tile_id"] = tile_dataset.df_tiles.triplet_tile_id
+            da_pred = get_embeddings(
+                model=model,
+                tile_dataset=tile_dataset,
+                prediction_batch_size=self.prediction_batch_size,
+            )
+            da_pred["triplet_tile_id"] = tile_dataset.df_tiles.triplet_tile_id
+
         da_pred.name = "emb"
         Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
         da_pred.to_netcdf(self.output().path)
@@ -85,7 +87,19 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
     def _get_tile_dataset(self, model_transforms):
         first_tile = next(iter(self.input().values()))
         tiles_path = Path(first_tile["image"].path).parent.parent
-        scene_tile_ids = self.input().keys()
+
+        # read in the scene tile locations so that we can pick out the tiles
+        # that belong to the requested dataset stage (train vs study).
+        # We can't simply use the aux-field tile_id values because these
+        # include all tiles in a scene (train or study)
+        scene_tile_locations = (
+            self.requires().requires()["tile_locations"].output().open()
+        )
+        scene_tile_ids = [
+            f"{stl['triplet_id']:05d}_{stl['tile_type']}"
+            for stl in scene_tile_locations
+            if stl["triplet_collection"] == self.dataset_stage
+        ]
 
         tile_type = self.tile_type
 
@@ -160,11 +174,21 @@ class SceneTileEmbeddings(luigi.Task):
         if self.tiles_kind == "triplets":
             datasets = []
             for tile_type, inp in self.input().items():
-                da_embs_tiletype = inp.open().swap_dims(tile_id="triplet_tile_id")
-                da_embs_tiletype["tile_type"] = tile_type
+                da_embs_tiletype = inp.open()
+                if da_embs_tiletype.count() == 0:
+                    # scene doesn't contain any tiles
+                    continue
+                da_embs_tiletype = da_embs_tiletype.swap_dims(tile_id="triplet_tile_id")
+                # put the tile-type into a coord so we can get a value for each tile
+                da_embs_tiletype["tile_type"] = da_embs_tiletype.attrs.pop(
+                    "tile_type"
+                ).lower()
                 datasets.append(da_embs_tiletype)
 
-            da = xr.concat(datasets, dim="triplet_tile_id")
+            if len(datasets) > 0:
+                da = xr.concat(datasets, dim="triplet_tile_id")
+            else:
+                da = xr.DataArray(name="emb")
             da.to_netcdf(self.output().path)
 
     def output(self):
