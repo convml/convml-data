@@ -1,6 +1,9 @@
 """
 Utilities for creating a images representing the scene source data
 """
+import importlib
+from pathlib import Path
+
 import numpy as np
 import xarray as xr
 from PIL import Image
@@ -62,7 +65,69 @@ def make_rgb(da, alpha=0.5, invert_values=False, **coord_components):
 
 
 def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
-    if source_name == "goes16":
+    if product == "user_function":
+        user_function_context = kwargs.get("context", {})
+        datasource_path = user_function_context.get("datasource_path", None)
+        product_name = user_function_context.get("product_name", None)
+        if datasource_path is None:
+            raise NotImplementedError(
+                "To use a user-function to generate an image you need to pass"
+                " in the `datasource_path` as entry in a dict argument called"
+                " `context`"
+            )
+        if product_name is None:
+            raise NotImplementedError(
+                "To use a user-function to generate an image you need to pass"
+                " in the `product_name` as entry in a dict argument called"
+                " `context`"
+            )
+
+        module_fpath = Path(datasource_path) / "user_functions.py"
+        if not module_fpath.exists():
+            raise NotImplementedError(
+                f"To use user-function you should create a file called {module_fpath.name}"
+                f" in {module_fpath.parent} containing a function called `{product_name}`"
+                " and taking `da_scene` as an argument"
+            )
+        spec = importlib.util.spec_from_file_location("user_function", module_fpath)
+        user_function_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(user_function_module)
+
+        image_function = getattr(user_function_module, product_name, None)
+        if image_function is None:
+            raise NotImplementedError(
+                f"Please define `{product_name}` in the user-function module source"
+                f" file `{module_fpath}`"
+            )
+
+        da_rgb = image_function(da_scene=da_scene)
+
+        if da_rgb.min() < 0.0:
+            raise Exception(
+                "The minimum value returned from your scaling function should "
+                "be at minimum 0"
+            )
+
+        if da_rgb.max() > 1.0:
+            raise Exception(
+                "The maximum value returned from your scaling function should "
+                "be at maximum 1"
+            )
+
+        if set(da_rgb.dims) != {"x", "y", "rgb"}:
+            raise Exception(
+                "The shape of the data-array returned from your scaling function"
+                "should have coordinates (x, y, rgb)"
+            )
+
+        def zero_one_to_255_uint(da):
+            return (da * 255).astype(np.uint8)
+
+        rgb_values = (
+            zero_one_to_255_uint(da_rgb).transpose("y", "x", "rgb").values[:, :, :3]
+        )
+        img_domain = Image.fromarray(rgb_values)
+    elif source_name == "goes16":
         if product == "truecolor_rgb" and "bands" in da_scene.coords:
             img_domain = goes16.satpy_rgb.rgb_da_to_img(da=da_scene)
         elif product.startswith("multichannel__") or product.startswith(
