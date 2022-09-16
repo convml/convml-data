@@ -9,10 +9,12 @@ from convml_tt.utils import get_embeddings
 
 from ...utils.luigi import XArrayTarget
 from ..tiles import SceneTilesData
+from .defaults import PREDICTION_BATCH_SIZE
 from .rect.sampling import (  # noqa
+    SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS,
     DatasetScenesSlidingWindowImageEmbeddings,
-    model_identifier_from_filename,
 )
+from .sampling_base import make_embedding_name
 
 
 class _SceneTileEmbeddingsBase(luigi.Task):
@@ -20,7 +22,7 @@ class _SceneTileEmbeddingsBase(luigi.Task):
     scene_id = luigi.Parameter()
 
     model_path = luigi.Parameter()
-    model_args = luigi.DictParameter(default={})
+    prediction_batch_size = luigi.IntParameter(default=PREDICTION_BATCH_SIZE)
 
     def requires(self):
         fp_model = Path(self.model_path)
@@ -49,12 +51,10 @@ class _SceneTileEmbeddingsBase(luigi.Task):
         if len(tile_dataset) == 0:
             raise Exception("The provided tile-dataset doesn't contain any tiles! ")
 
-        # TODO: move this
-        prediction_batch_size = self.model_args.get("prediction_batch_size", 32)
         da_pred = get_embeddings(
             model=model,
             tile_dataset=tile_dataset,
-            prediction_batch_size=prediction_batch_size,
+            prediction_batch_size=self.prediction_batch_size,
         )
         da_pred["triplet_tile_id"] = tile_dataset.df_tiles.triplet_tile_id
         da_pred.name = "emb"
@@ -66,7 +66,8 @@ class _SceneTileEmbeddingsBase(luigi.Task):
         raise NotImplementedError
 
     def output(self):
-        path = Path(self.data_path) / "embeddings" / self.tiles_kind
+        emb_name = make_embedding_name(model_path=self.model_path, kind=self.tiles_kind)
+        path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
         fn_out = f"{self.scene_id}.nc"
 
         return XArrayTarget(str(path / fn_out))
@@ -79,10 +80,11 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
 
     tile_type = luigi.Parameter()
     tiles_kind = "triplets"
+    dataset_stage = luigi.OptionalStrParameter(default="train")
 
     def _get_tile_dataset(self, model_transforms):
         first_tile = next(iter(self.input().values()))
-        tiles_path = Path(first_tile["image"].path).parent
+        tiles_path = Path(first_tile["image"].path).parent.parent
         scene_tile_ids = self.input().keys()
 
         tile_type = self.tile_type
@@ -91,7 +93,7 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
             data_dir=tiles_path,
             transform=model_transforms,
             tile_type=tile_type.upper(),
-            stage=None,
+            stage=self.dataset_stage,
         )
 
         # remove all but the tiles from the single scene we're interested in
@@ -105,7 +107,10 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
         return tile_dataset
 
     def output(self):
-        path = Path(self.data_path) / "embeddings" / self.tiles_kind
+        emb_name = make_embedding_name(
+            model_path=self.model_path, kind=self.tiles_kind, stage=self.dataset_stage
+        )
+        path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
         fn_out = f"{self.scene_id}.{self.tile_type}.nc"
 
         return XArrayTarget(str(path / fn_out))
@@ -134,7 +139,12 @@ class SceneTileEmbeddings(luigi.Task):
             )
         elif self.tiles_kind == "triplets":
             tasks = {}
-            for tile_type in ["anchor", "neighbor", "distant"]:
+            if "tile_type" not in self.model_args:
+                tile_types = ["anchor", "neighbor", "distant"]
+            else:
+                tile_types = [self.model_args["tile_type"]]
+
+            for tile_type in tile_types:
                 tasks[tile_type] = SceneTripletTileEmbeddings(
                     data_path=self.data_path,
                     scene_id=self.scene_id,
@@ -161,7 +171,20 @@ class SceneTileEmbeddings(luigi.Task):
         if self.tiles_kind == "rect-slidingwindow":
             return self.input()
         else:
-            path = Path(self.data_path) / "embeddings" / self.tiles_kind
+            model_args = dict(self.model_args)
+            if self.tiles_kind == "triplets":
+                # remove the tile_type so that it doesn't become part of the
+                # directory name
+                tile_type = model_args.pop("tile_type", "all")
+                if tile_type != "all":
+                    # if we're requesting a specific tile type then return the
+                    # parent task
+                    return self.input()[tile_type].output()
+
+            emb_name = make_embedding_name(
+                model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
+            )
+            path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
             fn_out = f"{self.scene_id}.nc"
 
             return XArrayTarget(str(path / fn_out))

@@ -15,29 +15,9 @@ from .... import DataSource
 from ....utils.luigi import XArrayTarget
 from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
 from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
-
-SLIDING_WINDOW_DEFAULT_KWARGS = dict(
-    step_size=10,
-    prediction_batch_size=32,
-)
-
-
-def model_identifier_from_filename(fn):
-    return fn.replace(".torch.pkl", "").replace(".ckpt", "")
-
-
-def make_embedding_name(model_path, model_args, kind):
-    # TODO: make default args depend on kind
-    full_args = dict(SLIDING_WINDOW_DEFAULT_KWARGS)
-    full_args.update(model_args)
-
-    skip_args = ["prediction_batch_size"]
-
-    name_parts = [model_identifier_from_filename(Path(model_path).name), kind]
-
-    name_parts += [f"{k}__{v}" for (k, v) in full_args.items() if k not in skip_args]
-
-    return ".".join(name_parts)
+from ..defaults import PREDICTION_BATCH_SIZE
+from ..sampling_base import make_embedding_name
+from .defaults import SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS
 
 
 class SlidingWindowImageEmbeddings(luigi.Task):
@@ -51,10 +31,10 @@ class SlidingWindowImageEmbeddings(luigi.Task):
     model_path = luigi.Parameter()
     image_path = luigi.Parameter()
     src_data_path = luigi.OptionalParameter()
-    step_size = luigi.IntParameter(default=SLIDING_WINDOW_DEFAULT_KWARGS["step_size"])
-    prediction_batch_size = luigi.IntParameter(
-        default=SLIDING_WINDOW_DEFAULT_KWARGS["prediction_batch_size"]
+    step_size = luigi.IntParameter(
+        default=SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS["step_size"]
     )
+    prediction_batch_size = luigi.IntParameter(PREDICTION_BATCH_SIZE)
 
     def run(self):
         model = TripletTrainerModel.load_from_checkpoint(self.model_path)
@@ -144,9 +124,13 @@ class SceneSlidingWindowImageEmbeddings(SlidingWindowImageEmbeddings):
         return self.input()["data"].path
 
     def output(self):
-        fn = "{}.embeddings.{}_step.nc".format(self.scene_id, self.step_size)
-        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
-        p_out = Path(self.data_path) / "embeddings" / "rect" / model_name / fn
+        fn = "{}.nc".format(self.scene_id)
+        emb_name = make_embedding_name(
+            kind="rect-slidingwindow",
+            model_path=self.model_path,
+            step_size=self.step_size,
+        )
+        p_out = Path(self.data_path) / "embeddings" / "rect" / emb_name / fn
         return XArrayTarget(str(p_out))
 
 

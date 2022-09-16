@@ -22,11 +22,8 @@ import xesmf as xe
 from convml_tt.interpretation.embedding_transforms import apply_transform
 
 from ...aux_sources import CheckForAuxiliaryFiles
-from ...embeddings.rect.sampling import (
-    SceneSlidingWindowImageEmbeddings,
-    make_embedding_name,
-)
-from ...embeddings.sampling import SceneTileEmbeddings, model_identifier_from_filename
+from ...embeddings.rect.sampling import SceneSlidingWindowImageEmbeddings
+from ...embeddings.sampling import SceneTileEmbeddings, make_embedding_name
 from ...sampling import CropSceneSourceFiles
 from ...tiles import SceneTilesData
 from ...utils import SceneBulkProcessingBaseTask
@@ -280,8 +277,11 @@ class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
         return da_scalar
 
     def output(self):
-        model_name = model_identifier_from_filename(fn=Path(self.model_path).name)
-        emb_name = f"{model_name}.{self.step_size}"
+        emb_name = make_embedding_name(
+            kind="rect-slidingwindow",
+            model_path=self.embedding_model_path,
+            **self.embedding_model_args,
+        )
 
         name_parts = [
             self.scene_id,
@@ -353,7 +353,10 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             values = []
             for triplet_tile_id in da_embs.triplet_tile_id.values:
                 da_tile_aux = aux_fields[triplet_tile_id]["data"].open()
-                da_tile_aux_value = da_tile_aux.mean()
+                da_tile_aux_value = da_tile_aux.mean(keep_attrs=True)
+                da_tile_aux_value.attrs["long_name"] = (
+                    "tile mean " + da_tile_aux_value.long_name
+                )
                 da_tile_aux_value["triplet_tile_id"] = triplet_tile_id
                 values.append(da_tile_aux_value)
             da_aux_values = xr.concat(values, dim="triplet_tile_id")
@@ -367,10 +370,11 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
         if self.tiles_kind == "rect-slidingwindow":
             return self.input()
 
-        model_name = model_identifier_from_filename(
-            fn=Path(self.embedding_model_path).name
+        emb_name = make_embedding_name(
+            kind=self.tiles_kind,
+            model_path=self.embedding_model_path,
+            **self.embedding_model_args,
         )
-        emb_name = f"{model_name}.{self.tiles_kind}"
 
         name_parts = [
             self.scene_id,
@@ -381,7 +385,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
         fn = ".".join(name_parts) + ".nc"
 
-        p = Path(self.data_path) / "embeddings" / "with_aux" / fn
+        p = Path(self.data_path) / "embeddings" / "with_aux" / self.tiles_kind / fn
         return utils.XArrayTarget(str(p))
 
 
@@ -443,11 +447,18 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
     def run(self):
         if self.embedding_transform is None:
             datasets = []
+            if self.tiles_kind == "rect-slidingwindow":
+                concat_dim = "scene_id"
+            elif self.tiles_kind == "triplets":
+                concat_dim = "triplet_tile_id"
+            else:
+                raise NotImplementedError(self.tiles_kind)
+
             for scene_id, inp in self.input().items():
                 ds_scene = inp.open()
                 ds_scene["scene_id"] = scene_id
                 datasets.append(ds_scene)
-            ds = xr.concat(datasets, dim="scene_id")
+            ds = xr.concat(datasets, dim=concat_dim)
         else:
             ds = self.input().open()
             transform_model_args = dict(self.embedding_transform_args)
@@ -462,6 +473,10 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
                 transform_model_args["pretrained_model"] = joblib.load(
                     fp_pretrained_model
                 )
+
+            import ipdb
+
+            ipdb.set_trace()
 
             ds["emb"], transform_model = apply_transform(
                 da=ds.emb,

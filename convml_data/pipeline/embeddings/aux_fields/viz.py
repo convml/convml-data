@@ -101,7 +101,7 @@ class AggPlotBaseTask(luigi.Task):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_path=self.embedding_model_path,
-            model_args=self.embedding_model_args,
+            **self.embedding_model_args,
         )
 
         if self.embedding_transform is not None:
@@ -146,7 +146,7 @@ class AggPlotBaseTask(luigi.Task):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_path=self.embedding_model_path,
-            model_args=self.embedding_model_args,
+            **self.embedding_model_args,
         )
         name_parts = [self.aux_name, "by", emb_name]
 
@@ -367,6 +367,8 @@ class ColumnScalarEmbeddingDistPlot(AggPlotBaseTask):
     statistics = luigi.OptionalListParameter(
         default=["mean", "sem", "min", "max", "std", "median"]
     )
+    dx = luigi.OptionalFloatParameter(default=0.1)
+    dy = luigi.OptionalParameter(default="dx")
 
     def _make_plot(self, ds_stacked, emb_var, emb_dim):
         data = {
@@ -378,13 +380,17 @@ class ColumnScalarEmbeddingDistPlot(AggPlotBaseTask):
         ds[f"{emb_dim}=0"].attrs["units"] = "1"
         ds[f"{emb_dim}=1"].attrs["units"] = "1"
 
+        dx = self.dx
+        if self.dy == "dx":
+            dy = dx
+
         fig, _ = plot_types.dist_plots(
             ds=ds,
             x=f"{emb_dim}=0",
             y=f"{emb_dim}=1",
             v=self.aux_name,
-            dx=0.1,
-            dy=0.1,
+            dx=dx,
+            dy=dy,
             cmap="jet",
             statistics=self.statistics,
         )
