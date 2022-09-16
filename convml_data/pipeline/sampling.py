@@ -7,9 +7,10 @@ import luigi
 import regridcart as rc
 
 from .. import DataSource
-from ..sources import build_fetch_tasks, create_image, extract_variable
+from ..sources import build_fetch_tasks, extract_variable
 from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
+from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
 
@@ -70,7 +71,7 @@ class SceneSourceFiles(luigi.Task):
             return luigi.LocalTarget(f"__fake_target__{self.scene_id}__")
 
 
-class CropSceneSourceFiles(luigi.Task):
+class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
@@ -98,10 +99,23 @@ class CropSceneSourceFiles(luigi.Task):
 
         if self.aux_name is None:
             source_name = data_source.source
-            product = data_source.type
+            product_type = data_source.type
+            product_name = self.data_source.name
+            product_meta = dict(name=product_name)
+            if product_type == "user_function":
+                if "input" not in self.data_source._meta:
+                    raise Exception(
+                        "To use a user-function on the primary data-set being"
+                        " produced you need to define the channels used by defining"
+                        " the section `input` in the input `meta.yaml` file"
+                    )
+                else:
+                    product_meta["input"] = self.data_source._meta["input"]
         else:
             source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product = self.data_source.aux_products[self.aux_name]["type"]
+            product_type = self.data_source.aux_products[self.aux_name]["type"]
+            product_name = self.aux_name
+            product_meta = self.data_source.aux_products[self.aux_name]
 
         # XXX: below is a hack to use the gridding in satpy, this needs
         # refactoring to clean it up
@@ -115,8 +129,9 @@ class CropSceneSourceFiles(luigi.Task):
         da_full = extract_variable(
             task_input=self.input()["data"],
             data_source=source_name,
-            product=product,
             bbox_crop=bbox,
+            product=product_type,
+            product_meta=product_meta,
         )
 
         if source_name == "goes16":
@@ -132,20 +147,12 @@ class CropSceneSourceFiles(luigi.Task):
                 domain=domain, da=da_full, pad_pct=self.pad_ptc
             )
 
-        img_cropped = None
-        if source_name == "goes16" and product == "truecolor_rgb":
-            # to be able to create a RGB image with satpy we need to set the
-            # attrs again to ensure we get a proper RGB image
-            da_cropped.attrs.update(da_full.attrs)
-        img_cropped = create_image(
-            da=da_cropped, source_name=source_name, product=product
-        )
+        img_cropped = self._create_image(da_scene=da_cropped, da_src=da_full)
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
 
-        if img_cropped is not None:
-            self.output()["image"].write(img_cropped)
+        self.output()["image"].write(img_cropped)
 
     @property
     def output_path(self):

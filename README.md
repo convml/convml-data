@@ -231,6 +231,84 @@ To produce regridded data on the whole domain or for tiles the argument
 `--aux-name <aux_product_identifier>` can be added to the pipeline commands
 given below.
 
+## user-defined functions for image creation
+
+When producing images for model training you may want to define your own
+transformations for how the input data scalar fields are turned into the red,
+green and blue image channels (for now only RGB image based training data is
+supported, this will change in future). This can be achieved by setting the
+`type` to `user_function` for a product you are including for creation. As well
+as the `type` you will need to define the `input` to the function. For now only
+data from `GOES-16` is supported and the inputs should either be a list of
+channels or a dictionary with the units of each channel used.
+
+```yaml
+aux_products:
+  ir_shallow_clouds_ch11_ch14_ch15_v1:
+    source: goes16
+    type: user_function
+    input:
+      11: brightness_temperature
+      14: brightness_temperature
+      15: brightness_temperature
+```
+
+Second you will need to create a function matching the product name (here
+`ir_shallow_clouds_ch11_ch14_ch15_v1`) in a file called `user_functions.py`
+next to `meta.yaml`. The following example are scalings used that work with
+shallow clouds using brightness temperature of channels in the "water vapour
+window":
+
+```python
+# user_functions.py
+import numpy as np
+import xarray as xr
+
+
+def normalize(value, lower_limit, upper_limit, clip=True):
+    """
+    Normalize values between 0 and 1 between a lower and upper limit
+
+    Parameters
+    ----------
+    value :
+        The original value. A single value, vector, or array.
+    upper_limit :
+        The upper limit.
+    lower_limit :
+        The lower limit.
+    clip : bool
+        - True: Clips values between 0 and 1 for RGB.
+        - False: Retain the numbers that extends outside 0-1 range.
+    Output:
+        Values normalized between the upper and lower limit.
+    """
+    norm = (value - lower_limit) / (upper_limit - lower_limit)
+    if clip:
+        norm = np.clip(norm, 0, 1)
+    return norm
+
+
+def ir_shallow_clouds_ch11_ch14_ch15_v1(da_scene):
+    bt_min, bt_max = 270, 300
+    clip = True
+
+    def brightness_temperature_to_color(bt):
+        return 1.0 - normalize(bt, bt_min, bt_max, clip=clip)
+
+    nx = int(da_scene.x.count())
+    ny = int(da_scene.y.count())
+
+    arr_img = np.zeros((ny, nx, 3))
+    arr_img[..., 0] = brightness_temperature_to_color(da_scene.sel(channel=14))
+    da_ch_11_14_avg = 0.5 * (da_scene.sel(channel=11) + da_scene.sel(channel=14))
+    arr_img[..., 1] = brightness_temperature_to_color(da_ch_11_14_avg)
+    arr_img[..., 2] = brightness_temperature_to_color(da_scene.sel(channel=15))
+
+    return xr.DataArray(arr_img, dims=("y", "x", "rgb"))
+```
+
+
 # Processing pipeline
 
 To facilitate generating huge datasets and processing all data in parallel the

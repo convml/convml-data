@@ -68,6 +68,7 @@ class DataSource:
 
         assert "source" in self._meta
         assert "type" in self._meta
+        self.name = self._meta.get("name", None)
 
     def _parse_domain_meta(self):
         domain_meta = self._meta.get("domain", dict(kind="as_source"))
