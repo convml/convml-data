@@ -96,7 +96,12 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
             da_rgba = make_rgb(
                 da=da_scene.squeeze().expand_dims("foo"), alpha=1.0, foo=[0, 0, 0]
             )
-            img_data = da_rgba.transpose("lon", "lat", "rgba").data
+            da_rgb = da_rgba.sel(rgba=[0, 1, 2]).rename(dict(rgba="rgb"))
+            # need to ensure that the `rgb` dimension is last
+            dims = list(da_rgb.dims)
+            dims.remove("rgb")
+            dims.append("rgb")
+            img_data = da_rgb.transpose(*dims).data[::-1, :, :]
         else:
             img_data = da_scene.data
         v_min, v_max = np.nanmin(img_data), np.nanmax(img_data)

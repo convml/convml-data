@@ -26,7 +26,7 @@ from ...embeddings.rect.sampling import (
     SceneSlidingWindowImageEmbeddings,
     make_embedding_name,
 )
-from ...embeddings.sampling import TileEmbeddings, model_identifier_from_filename
+from ...embeddings.sampling import SceneTileEmbeddings, model_identifier_from_filename
 from ...sampling import CropSceneSourceFiles
 from ...tiles import SceneTilesData
 from ...utils import SceneBulkProcessingBaseTask
@@ -93,9 +93,8 @@ class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
 
     data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
-    model_path = luigi.Parameter()
-    step_size = luigi.IntParameter(default=10)
-    prediction_batch_size = luigi.IntParameter(default=32)
+    embedding_model_path = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
 
     aux_name = luigi.Parameter()
 
@@ -117,9 +116,8 @@ class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
         tasks["emb"] = SceneSlidingWindowImageEmbeddings(
             data_path=self.data_path,
             scene_id=self.scene_id,
-            model_path=self.model_path,
-            step_size=self.step_size,
-            prediction_batch_size=self.prediction_batch_size,
+            model_path=self.embedding_model_path,
+            model_args=self.embedding_model_args,
         )
 
         # aux field tasks below
@@ -320,19 +318,13 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
 
     def requires(self):
-        prediction_batch_size = self.embedding_model_args.get(
-            "prediction_batch_size", 32
-        )
-        step_size = self.embedding_model_args.get("step_size", 100)
-
         if self.tiles_kind == "rect-slidingwindow":
             return SceneSlidingWindowEmbeddingsAuxFieldRegridding(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 aux_name=self.aux_name,
-                model_path=self.embedding_model_path,
-                step_size=step_size,
-                prediction_batch_size=prediction_batch_size,
+                embedding_model_path=self.embedding_model_path,
+                embedding_model_args=self.embedding_model_args,
             )
         else:
             tasks = {}
@@ -342,27 +334,55 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 scene_id=self.scene_id,
                 tiles_kind=self.tiles_kind,
             )
-            tasks["embeddings"] = TileEmbeddings(
+            tasks["embeddings"] = SceneTileEmbeddings(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 tiles_kind=self.tiles_kind,
                 model_path=self.embedding_model_path,
-                step_size=step_size,
-                prediction_batch_size=prediction_batch_size,
+                model_args=self.embedding_model_args,
             )
             return tasks
 
     def run(self):
         if self.tiles_kind == "rect-slidingwindow":
             pass
+        elif self.tiles_kind == "triplets":
+            aux_fields = self.input()["aux"]
+            da_embs = self.input()["embeddings"].open()
+
+            values = []
+            for triplet_tile_id in da_embs.triplet_tile_id.values:
+                da_tile_aux = aux_fields[triplet_tile_id]["data"].open()
+                da_tile_aux_value = da_tile_aux.mean()
+                da_tile_aux_value["triplet_tile_id"] = triplet_tile_id
+                values.append(da_tile_aux_value)
+            da_aux_values = xr.concat(values, dim="triplet_tile_id")
+            ds = xr.merge([da_embs, da_aux_values])
+            Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
+            ds.to_netcdf(self.output().path)
         else:
             raise NotImplementedError(self.tiles_kind)
 
     def output(self):
         if self.tiles_kind == "rect-slidingwindow":
             return self.input()
-        else:
-            raise NotImplementedError(self.tiles_kind)
+
+        model_name = model_identifier_from_filename(
+            fn=Path(self.embedding_model_path).name
+        )
+        emb_name = f"{model_name}.{self.tiles_kind}"
+
+        name_parts = [
+            self.scene_id,
+            self.aux_name,
+            "by",
+            emb_name,
+        ]
+
+        fn = ".".join(name_parts) + ".nc"
+
+        p = Path(self.data_path) / "embeddings" / "with_aux" / fn
+        return utils.XArrayTarget(str(p))
 
 
 class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):

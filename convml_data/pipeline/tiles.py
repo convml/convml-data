@@ -261,7 +261,7 @@ class SceneTilesData(_SceneRectSampleBase):
                         "Produced image has incorrect shape "
                         f"({tile_N}, {tile_N}) != {img_shape}"
                     )
-            img_tile.save(str(tile_output["image"].fn))
+            img_tile.save(str(tile_output["image"].path))
 
             tile_meta["scene_id"] = self.scene_id
             if self.aux_name is not None:
