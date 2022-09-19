@@ -464,7 +464,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_path=self.embedding_model_path,
-            model_args=self.embedding_model_args,
+            **dict(self.embedding_model_args),
         )
 
         name_parts = [
