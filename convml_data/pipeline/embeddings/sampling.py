@@ -280,6 +280,7 @@ class _AggregatedTileEmbeddingsTransformMixin:
             da=da_emb,
             transform_type=self.embedding_transform,
             return_model=True,
+            n_jobs=-1,  # default to using all CPU cores
             **transform_model_args,
         )
 
@@ -340,11 +341,23 @@ class AggregatedDatasetScenesTileEmbeddings(
     def run(self):
         if self.embedding_transform is None:
             datasets = []
+            if self.tiles_kind == "rect-slidingwindow":
+                concat_dim = "scene_id"
+            elif self.tiles_kind == "triplets":
+                # not all scenes contain the same number of triplets so we need
+                # to stack by something else otherwise we'll get nan-values
+                concat_dim = "triplet_tile_id"
+            else:
+                raise NotImplementedError(self.tiles_kind)
+
+            datasets = []
             for scene_id, inp in self.input().items():
                 da_scene = inp.open()
+                if da_scene.count() == 0:
+                    continue
                 da_scene["scene_id"] = scene_id
                 datasets.append(da_scene)
-            da_all_scenes = xr.concat(datasets, dim="scene_id")
+            da_all_scenes = xr.concat(datasets, dim=concat_dim)
         else:
             da_all_scenes = self.input().open()
             da_all_scenes = self._apply_transform(da_emb=da_all_scenes)
