@@ -357,7 +357,7 @@ luigi --module convml_data.pipeline.embeddings.sampling AggregatedDatasetScenesT
 ### Transforming embeddings
 
 ```bash
-luigi --module --module convml_data.pipeline.embeddings.sampling AggregatedDatasetScenesTileEmbeddings --step-size 30 --model-path embeddings/models/fixednorm-stage-2.torch.pkl --embedding-transform pca
+luigi --module --module convml_data.pipeline.embeddings.sampling AggregatedDatasetScenesTileEmbeddings --model-path embeddings/models/fixednorm-stage-2.torch.pkl --embedding-transform pca --tiles-kind {triplets,trajectories,rect-slidingwindow}
 ```
 
 ## Plotting optical flow trajectories for all scenes
@@ -372,7 +372,7 @@ $> python -m luigi --module convml_tt.interpretation.rectpred.pipeline.flow Plot
 # Analysing auxiliary fields with embeddings
 
 ```bash
-luigi --module convml_data.pipeline.embeddings.aux_fields.data SceneAuxFieldWithEmbeddings --aux-name cloud_top_temperature --scene-id goes16__202002021540 --tiles-kind rect-slidingwindow --model-path fixednorm-stage-2.torch.pkl --step-size 100
+luigi --module convml_data.pipeline.embeddings.aux_fields.data AggregatedDatasetScenesAuxFieldWithEmbeddings --aux-name cloud_top_temperature --tiles-kind rect-slidingwindow --model-path fixednorm-stage-2.torch.pkl --embedding-model-args '{ "step_size": 100 }'
 ```
 
 Visualisation:
