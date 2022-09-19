@@ -6,11 +6,11 @@ import regridcart as rc
 
 from .. import DataSource
 from ..sampling import domain as sampling_domain
-from ..sources.images import rgb_image_from_scene_data
 from ..utils.domain_images import align_axis_x
 from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
+from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
 
@@ -34,7 +34,7 @@ def _plot_scene_aux(da_aux, img, **kwargs):
     return fig, axes
 
 
-class SceneRegriddedData(_SceneRectSampleBase):
+class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
     """
     Regrid the scene source data to a fixed Cartesian resolution
     """
@@ -86,13 +86,11 @@ class SceneRegriddedData(_SceneRectSampleBase):
 
     def run(self):
         domain_output = self.output()
-        data_source = self.data_source
 
-        da_src = None
+        inputs = self.input()
+        da_src = inputs["source_data"]["data"].open()
+
         if not domain_output["data"].exists():
-            inputs = self.input()
-            da_src = inputs["source_data"]["data"].open()
-
             domain = self.data_source.domain
             if isinstance(domain, sampling_domain.SourceDataDomain):
                 domain = domain.generate_from_dataset(ds=da_src)
@@ -121,29 +119,8 @@ class SceneRegriddedData(_SceneRectSampleBase):
         else:
             da_domain = domain_output["data"].open()
 
-        if self.aux_name is not None:
-            img_domain = self.input()["base"]["image"].open()
-            img_domain.save(domain_output["image"].fn)
-        else:
-
-            if self.aux_name is None:
-                source_name = self.data_source.source
-                product = self.data_source.type
-            else:
-                source_name = self.data_source.aux_products[self.aux_name]["source"]
-                product = self.data_source.aux_products[self.aux_name]["type"]
-
-            # need the scene attrs to generate a rgb image
-            if da_src is None:
-                da_src = self.input()["source_data"]["data"].open()
-            img_domain = rgb_image_from_scene_data(
-                data_source=data_source,
-                da_scene=da_domain,
-                src_attrs=da_src.attrs,
-                source_name=source_name,
-                product=product,
-            )
-            img_domain.save(str(domain_output["image"].fn))
+        img_domain = self._create_image(da_scene=da_domain, da_src=da_src)
+        img_domain.save(str(domain_output["image"].fn))
 
     def output(self):
         scene_data_path = Path(self.data_path) / "rect"

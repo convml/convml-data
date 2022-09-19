@@ -6,10 +6,13 @@ import xarray as xr
 from . import ceres, era5, goes16
 from . import images as source_images
 from .goes16.pipeline import GOES16Fetch, GOES16Query
+from .images import rgb_image_from_scene_data as create_image  # noqa
 from .les import FindLESFiles, LESDataFile
 
 
-def build_query_tasks(source_name, source_type, time_intervals, source_data_path):
+def build_query_tasks(
+    source_name, source_type, time_intervals, source_data_path, product_meta={}
+):
     """return collection of luigi.Task objects that will query a data source"""
     if source_name == "goes16":
         if source_type == "truecolor_rgb":
@@ -18,6 +21,8 @@ def build_query_tasks(source_name, source_type, time_intervals, source_data_path
             "singlechannel__"
         ):
             channels = list(goes16.parse_product_shorthand(source_type).keys())
+        elif source_type == "user_function":
+            channels = get_user_function_source_input_names(product_meta=product_meta)
         else:
             raise NotImplementedError(source_type)
 
@@ -104,6 +109,26 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
     return task
 
 
+class IncompleteSourceDefition(Exception):
+    pass
+
+
+def get_user_function_source_input_names(product_meta):
+    if "input" not in product_meta:
+        raise IncompleteSourceDefition(
+            "To use a `user_function` you will need to define its inputs"
+            " by listing each channel needed in a section called `input`"
+        )
+    source_inputs = product_meta["input"]
+    if isinstance(source_inputs, list):
+        input_names = source_inputs
+    elif isinstance(source_inputs, dict):
+        input_names = list(source_inputs.keys())
+    else:
+        raise NotImplementedError(source_inputs)
+    return input_names
+
+
 def get_time_for_filename(source_name, filename):
     """Return the timestamp for a given source data file"""
     if source_name == "goes16":
@@ -120,7 +145,7 @@ def get_time_for_filename(source_name, filename):
     return t
 
 
-def extract_variable(task_input, data_source, product, bbox_crop=None):
+def extract_variable(task_input, data_source, product, product_meta, bbox_crop=None):
     if data_source == "ceres":
         _, var_name = product.split("__")
         da = ceres.extract_variable(task_input=task_input, var_name=var_name)
@@ -175,6 +200,28 @@ def extract_variable(task_input, data_source, product, bbox_crop=None):
                 derived_variable=derived_variable,
                 channel_number=channel_number,
             )
+        elif product == "user_function":
+            das = []
+            product_input = product_meta["input"]
+            for task_channel in task_input:
+                path = task_channel.path
+                file_meta = GOES16Query.parse_filename(filename=path)
+                channel_number = file_meta["channel"]
+
+                derived_variable = None
+                if isinstance(product_input, dict):
+                    derived_variable = product_input[channel_number]
+
+                da = goes16.satpy_rgb.load_radiance_channel(
+                    scene_fn=path,
+                    channel_number=channel_number,
+                    derived_variable=derived_variable,
+                )
+                da["channel"] = channel_number
+                das.append(da)
+            # TODO: may need to do some regridding here if we try to stack
+            # channels with different spatial resolution
+            da = xr.concat(das, dim="channel")
         else:
             da = goes16.satpy_rgb.load_aux_file(scene_fn=task_input)
     elif data_source == "LES":
@@ -187,9 +234,3 @@ def extract_variable(task_input, data_source, product, bbox_crop=None):
         raise NotImplementedError(data_source)
 
     return da
-
-
-def create_image(da, source_name, product):
-    return source_images.rgb_image_from_scene_data(
-        source_name=source_name, da_scene=da, product=product
-    )

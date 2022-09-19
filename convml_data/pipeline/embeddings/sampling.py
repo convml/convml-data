@@ -1,18 +1,21 @@
 from pathlib import Path
 
+import joblib
 import luigi
 import xarray as xr
 from convml_tt.data.dataset import ImageSingletDataset
 from convml_tt.data.transforms import get_transforms as get_model_transforms
+from convml_tt.interpretation.embedding_transforms import apply_transform
 from convml_tt.system import TripletTrainerModel
 from convml_tt.utils import get_embeddings
 
 from ...utils.luigi import XArrayTarget
 from ..tiles import SceneTilesData
+from ..utils import SceneBulkProcessingBaseTask
 from .defaults import PREDICTION_BATCH_SIZE
 from .rect.sampling import (  # noqa
     SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS,
-    DatasetScenesSlidingWindowImageEmbeddings,
+    SceneSlidingWindowImageEmbeddings,
 )
 from .sampling_base import make_embedding_name
 
@@ -145,7 +148,7 @@ class SceneTileEmbeddings(luigi.Task):
             raise Exception(f"embedding models should be stored in {fp_model_expected}")
 
         if self.tiles_kind == "rect-slidingwindow":
-            return DatasetScenesSlidingWindowImageEmbeddings(
+            return SceneSlidingWindowImageEmbeddings(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 model_path=self.model_path,
@@ -212,3 +215,165 @@ class SceneTileEmbeddings(luigi.Task):
             fn_out = f"{self.scene_id}.nc"
 
             return XArrayTarget(str(path / fn_out))
+
+
+class DatasetScenesTileEmbeddings(SceneBulkProcessingBaseTask):
+    """
+    Produce embeddings for all tiles across all scenes in dataset
+    """
+
+    TaskClass = SceneTileEmbeddings
+
+    tiles_kind = luigi.Parameter()
+    data_path = luigi.Parameter(default=".")
+
+    model_path = luigi.Parameter()
+    model_args = luigi.DictParameter(default={})
+
+    def _get_task_class_kwargs(self, scene_ids):
+        return dict(
+            tiles_kind=self.tiles_kind,
+            model_path=self.model_path,
+            model_args=self.model_args,
+        )
+
+
+def make_transform_name(transform, **transform_args):
+    if "pretrained_model" in transform_args:
+        return transform_args["pretrained_model"]
+
+    if transform is None:
+        return None
+
+    skip_transform_args = []
+    name_parts = [
+        transform,
+    ]
+
+    if len(transform_args) > 0:
+        name_parts += [
+            f"{k}__{v}"
+            for (k, v) in transform_args.items()
+            if k not in skip_transform_args
+        ]
+
+    return ".".join(name_parts)
+
+
+class _AggregatedTileEmbeddingsTransformMixin:
+    embedding_transform = luigi.Parameter(default=None)
+    embedding_transform_args = luigi.DictParameter(default={})
+
+    def _apply_transform(self, da_emb):
+        transform_model_args = dict(self.embedding_transform_args)
+
+        if "pretrained_model" in transform_model_args:
+            fp_pretrained_model = (
+                Path(self.data_path)
+                / "embeddings"
+                / "models"
+                / "{}.joblib".format(transform_model_args.pop("pretrained_model"))
+            )
+            transform_model_args["pretrained_model"] = joblib.load(fp_pretrained_model)
+
+        da_emb, transform_model = apply_transform(
+            da=da_emb,
+            transform_type=self.embedding_transform,
+            return_model=True,
+            **transform_model_args,
+        )
+
+        if "pretrained_model" not in transform_model_args:
+            if self.__class__.__module__ == "convml_data.pipeline.embeddings.sampling":
+                embedding_model_path = self.model_path
+                embedding_model_args = self.model_args
+            else:
+                embedding_model_path = self.embedding_model_path
+                embedding_model_args = self.embedding_model_args
+
+            emb_model_name = make_embedding_name(
+                kind=self.tiles_kind,
+                model_path=embedding_model_path,
+                **embedding_model_args,
+            )
+
+            fn = f"{emb_model_name}.{self.transform_name}.joblib"
+            fp_transform_model = Path(embedding_model_path).parent / fn
+            joblib.dump(transform_model, fp_transform_model)
+
+        return da_emb
+
+    @property
+    def transform_name(self):
+        return make_transform_name(
+            transform=self.embedding_transform,
+            **dict(self.embedding_transform_args),
+        )
+
+
+class AggregatedDatasetScenesTileEmbeddings(
+    SceneBulkProcessingBaseTask, _AggregatedTileEmbeddingsTransformMixin
+):
+    """
+    Combine into a single file all embeddings for all tiles across all scenes in dataset
+    """
+
+    tiles_kind = luigi.Parameter()
+    data_path = luigi.Parameter(default=".")
+
+    model_path = luigi.Parameter()
+    model_args = luigi.DictParameter(default={})
+
+    def requires(self):
+        kwargs = dict(
+            tiles_kind=self.tiles_kind,
+            data_path=self.data_path,
+            model_path=self.model_path,
+            model_args=self.model_args,
+        )
+
+        if self.embedding_transform is None:
+            return DatasetScenesTileEmbeddings(**kwargs)
+        else:
+            return self.__class__(**kwargs)
+
+    def run(self):
+        if self.embedding_transform is None:
+            datasets = []
+            for scene_id, inp in self.input().items():
+                da_scene = inp.open()
+                da_scene["scene_id"] = scene_id
+                datasets.append(da_scene)
+            da_all_scenes = xr.concat(datasets, dim="scene_id")
+        else:
+            da_all_scenes = self.input().open()
+            da_all_scenes = self._apply_transform(da_emb=da_all_scenes)
+
+        Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
+        da_all_scenes.to_netcdf(self.output().path)
+
+    def output(self):
+        model_args = dict(self.model_args)
+        if self.tiles_kind == "triplets":
+            # remove the tile_type so that it doesn't become part of the
+            # directory name
+            tile_type = model_args.pop("tile_type", "all")
+            if tile_type != "all":
+                # if we're requesting a specific tile type then return the
+                # parent task
+                return self.input()[tile_type].output()
+
+        emb_name = make_embedding_name(
+            model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
+        )
+        path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
+
+        name_parts = ["__all__"]
+
+        transform_name = self.transform_name
+        if transform_name is not None:
+            name_parts.append(transform_name)
+
+        fn_out = f"{'.'.join(name_parts)}.nc"
+
+        return XArrayTarget(str(path / fn_out))
