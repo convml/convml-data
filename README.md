@@ -326,28 +326,11 @@ $> python -m luigi --module convml_data.pipeline GenerateSceneIDs
 
 ## Generate cropped data for all scenes
 
+These scenes will be cropped to the bounds defined in `meta.yaml`
+
 ```bash
 luigi --module convml_data.pipeline GenerateCroppedScenes
 luigi --module convml_data.pipeline GenerateCroppedScenes --aux-name cloud_top_height_ceres
-```
-
-# Triplet-based analysis
-
-## Generate tiles
-
-```bash
-luigi --module convml_data.pipeline GenerateTiles
-luigi --module convml_data.pipeline GenerateTiles --aux-name cloud_top_height_ceres
-```
-
-
-# Sliding-window based analysis
-
-
-## Generate sliding window embeddings
-
-```bash
-luigi --local-scheduler --module convml_tt.interpretation.rectpred.pipeline.data AggregateFullDatasetImagePredictionMapData --data-path . --step-size 30 --model-path ml-data/fixednorm-stage-2.torch.pkl
 ```
 
 ## Generate regridded data for all scenes
@@ -357,32 +340,43 @@ luigi --module convml_data.pipeline GenerateRegriddedScenes
 luigi --module convml_data.pipeline GenerateRegriddedScenes --aux-name cloud_top_height_ceres
 ```
 
+# Embedding analysis
+
+## Generate tiles
+
+```bash
+luigi --module convml_data.pipeline GenerateTiles --tiles-kind {triplets,trajectories} [--aux-name {cloud_top_height_ceres}]
+```
+
+## Generate tile embeddings
+
+```bash
+luigi --module convml_data.pipeline.embeddings.sampling AggregatedDatasetScenesTileEmbeddings --step-size 30 --model-path embeddings/models/fixednorm-stage-2.torch.pkl --tiles-kind {triplets,trajectories,rect-slidingwindow}
+```
+
+### Transforming embeddings
+
+```bash
+luigi --module --module convml_data.pipeline.embeddings.sampling AggregatedDatasetScenesTileEmbeddings --step-size 30 --model-path embeddings/models/fixednorm-stage-2.torch.pkl --embedding-transform pca
+```
+
 ## Plotting optical flow trajectories for all scenes
+
+*NB*: not currently working
 
 ```bash
 $> python -m luigi --module convml_tt.interpretation.rectpred.pipeline.flow PlotAllScenesWithScenePrefixTrajectories
 ```
 
-## Sliding-window based inference
-
-```bash
-luigi --module convml_tt.data.interpretation.rectpred.pipeline AggregateFullDatasetImagePredictionMapData
-```
-
-## Transforming embeddings
-
-```bash
-luigi --module convml_tt.interpretation.rectpred.pipeline.transforms CreateAllPredictionMapsDataTransformed --embedding-model-path ml-data/fixednorm-stage-2.torch.pkl --step-size 30 --transform-type pca
-```
-
-```bash
-luigi --module convml_tt.interpretation.rectpred.pipeline.transforms CreateAllPredictionMapsDataTransformed --embedding-model-path ml-data/fixednorm-stage-2.torch.pkl --step-size 30 --pretrained-transform-model pca_transform
-```
-
 
 # Analysing auxiliary fields with embeddings
 
+```bash
+luigi --module convml_data.pipeline.embeddings.aux_fields.data SceneAuxFieldWithEmbeddings --aux-name cloud_top_temperature --scene-id goes16__202002021540 --tiles-kind rect-slidingwindow --model-path fixednorm-stage-2.torch.pkl --step-size 100
+```
+
+Visualisation:
 
 ```bash
-luigi --local-scheduler --module convml_data.pipeline.embeddings.aux_fields.data SceneAuxFieldWithEmbeddings --aux-name cloud_top_temperature --scene-id goes16__202002021540 --tiles-kind rect-slidingwindow --model-path fixednorm-stage-2.torch.pkl --step-size 100
+luigi --module convml_data.pipeline.embeddings.aux_fields.viz ColumnScalarEmbeddingDistPlot --aux-name total_net_radiation --tiles-kind rect-slidingwindow
 ```
