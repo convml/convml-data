@@ -60,7 +60,9 @@ class _SceneTileEmbeddingsBase(luigi.Task):
                 tile_dataset=tile_dataset,
                 prediction_batch_size=self.prediction_batch_size,
             )
+            # TODO: generalise for trajectory-based tiles
             da_pred["triplet_tile_id"] = tile_dataset.df_tiles.triplet_tile_id
+            da_pred = da_pred.swap_dims(dict(tile_id="triplet_tile_id"))
 
         da_pred.name = "emb"
         Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
@@ -156,10 +158,11 @@ class SceneTileEmbeddings(luigi.Task):
             )
         elif self.tiles_kind == "triplets":
             tasks = {}
+            model_args = dict(self.model_args)
             if "tile_type" not in self.model_args:
                 tile_types = ["anchor", "neighbor", "distant"]
             else:
-                tile_types = [self.model_args["tile_type"]]
+                tile_types = [model_args.pop("tile_type")]
 
             for tile_type in tile_types:
                 tasks[tile_type] = SceneTripletTileEmbeddings(
@@ -167,7 +170,7 @@ class SceneTileEmbeddings(luigi.Task):
                     scene_id=self.scene_id,
                     model_path=self.model_path,
                     tile_type=tile_type,
-                    **dict(self.model_args),
+                    **model_args,
                 )
             return tasks
         else:
@@ -181,7 +184,6 @@ class SceneTileEmbeddings(luigi.Task):
                 if da_embs_tiletype.count() == 0:
                     # scene doesn't contain any tiles
                     continue
-                da_embs_tiletype = da_embs_tiletype.swap_dims(tile_id="triplet_tile_id")
                 # put the tile-type into a coord so we can get a value for each tile
                 da_embs_tiletype["tile_type"] = da_embs_tiletype.attrs.pop(
                     "tile_type"
@@ -206,7 +208,7 @@ class SceneTileEmbeddings(luigi.Task):
                 if tile_type != "all":
                     # if we're requesting a specific tile type then return the
                     # parent task
-                    return self.input()[tile_type].output()
+                    return self.input()[tile_type]
 
             emb_name = make_embedding_name(
                 model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
@@ -355,6 +357,7 @@ class AggregatedDatasetScenesTileEmbeddings(
                 da_scene = inp.open()
                 if da_scene.count() == 0:
                     continue
+
                 da_scene["scene_id"] = scene_id
                 datasets.append(da_scene)
             da_all_scenes = xr.concat(datasets, dim=concat_dim)
@@ -367,21 +370,20 @@ class AggregatedDatasetScenesTileEmbeddings(
 
     def output(self):
         model_args = dict(self.model_args)
+
+        name_parts = ["__all__"]
+
         if self.tiles_kind == "triplets":
             # remove the tile_type so that it doesn't become part of the
             # directory name
             tile_type = model_args.pop("tile_type", "all")
             if tile_type != "all":
-                # if we're requesting a specific tile type then return the
-                # parent task
-                return self.input()[tile_type].output()
+                name_parts.append(tile_type)
 
         emb_name = make_embedding_name(
             model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
         )
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
-
-        name_parts = ["__all__"]
 
         transform_name = self.transform_name
         if transform_name is not None:
