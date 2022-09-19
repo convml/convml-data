@@ -114,7 +114,7 @@ class SceneSlidingWindowEmbeddingsAuxFieldRegridding(luigi.Task):
             data_path=self.data_path,
             scene_id=self.scene_id,
             model_path=self.embedding_model_path,
-            model_args=self.embedding_model_args,
+            **self.embedding_model_args,
         )
 
         # aux field tasks below
