@@ -10,7 +10,9 @@ from convml_tt.system import TripletTrainerModel
 from convml_tt.utils import get_embeddings
 
 from ...utils.luigi import XArrayTarget
+from ..sampling import GenerateSceneIDs
 from ..tiles import SceneTilesData
+from ..triplets import TripletSceneSplits
 from ..utils import SceneBulkProcessingBaseTask
 from .defaults import PREDICTION_BATCH_SIZE
 from .rect.sampling import (  # noqa
@@ -108,20 +110,21 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
 
         tile_type = self.tile_type
 
+        def _include_only_scene_tiles(df_tiles):
+            # remove all but the tiles from the single scene we're interested in
+            df_tiles["triplet_tile_id"] = df_tiles.apply(
+                lambda row: f"{row.name:05d}_{row.tile_type}", axis=1
+            )
+            df_tiles_scene = df_tiles[df_tiles.triplet_tile_id.isin(scene_tile_ids)]
+            return df_tiles_scene
+
         tile_dataset = ImageSingletDataset(
             data_dir=tiles_path,
             transform=model_transforms,
             tile_type=tile_type.upper(),
             stage=self.dataset_stage,
+            filter_func=_include_only_scene_tiles,
         )
-
-        # remove all but the tiles from the single scene we're interested in
-        df_tiles = tile_dataset.df_tiles
-        df_tiles["triplet_tile_id"] = df_tiles.apply(
-            lambda row: f"{row.name:05d}_{row.tile_type}", axis=1
-        )
-        df_tiles_scene = df_tiles[df_tiles.triplet_tile_id.isin(scene_tile_ids)]
-        tile_dataset.df_tiles = df_tiles_scene
 
         return tile_dataset
 
@@ -238,6 +241,18 @@ class DatasetScenesTileEmbeddings(SceneBulkProcessingBaseTask):
             model_path=self.model_path,
             model_args=self.model_args,
         )
+
+    def _filter_scene_ids(self, scene_ids):
+        if self.tiles_kind == "triplets":
+            tiles = self.input().read()
+            scene_ids = [scene_id for scene_id in scene_ids if len(tiles[scene_id]) > 0]
+        return scene_ids
+
+    def _get_scene_ids_task_class(self):
+        if self.tiles_kind == "triplets":
+            return TripletSceneSplits
+        else:
+            return GenerateSceneIDs
 
 
 def make_transform_name(transform, **transform_args):

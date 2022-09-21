@@ -45,18 +45,20 @@ class SlidingWindowImageEmbeddings(luigi.Task):
             step="predict", normalize_for_arch=model.base_arch
         )
 
+        def _only_include_scene_tiles(df_rect_images):
+            filename_scene = Path(self.image_path).name
+            df_rect_images_scene = df_rect_images[
+                df_rect_images.filepath == filename_scene
+            ]
+            return df_rect_images_scene
+
         tile_dataset = MovingWindowImageTilingDataset(
             data_dir=Path(self.image_path).parent,
             transform=model_transforms,
             step=(self.step_size, self.step_size),
             N_tile=N_tile,
+            filter_func=_only_include_scene_tiles,
         )
-
-        # remove all but the single image we're interested in
-        df_tiles = tile_dataset.df_tiles
-        filename_scene = Path(self.image_path).name
-        df_tiles_scene = df_tiles[df_tiles.scene_filepath == filename_scene]
-        tile_dataset.df_tiles = df_tiles_scene
 
         if len(tile_dataset) == 0:
             raise Exception("The provided tile-dataset doesn't contain any tiles! ")
