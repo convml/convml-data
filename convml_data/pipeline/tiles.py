@@ -119,6 +119,9 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
     def domain(self):
         tiles_meta = self.input()["tile_locations"].open()
 
+        if len(tiles_meta) == 0:
+            return None
+
         lats = []
         lons = []
         for tile_meta in tiles_meta:
