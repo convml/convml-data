@@ -7,8 +7,8 @@ from PIL import Image
 
 from ... import DataSource
 from ...utils.luigi import DBTarget
-from .. import SceneBulkProcessingBaseTask, SceneRegriddedData
-from ..regridding import GenerateRegriddedScenes
+from ..regridding import GenerateRegriddedScenes, SceneRegriddedData
+from ..utils import SceneBulkProcessingBaseTask
 
 IMAGE_TILE_FILENAME_FORMAT = "{i0:05d}_{j0:05d}.png"
 TILE_IDENTIFIER_FORMAT = "{scene_id}__{tile_id:05d}"
