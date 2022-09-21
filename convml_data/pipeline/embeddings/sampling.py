@@ -286,6 +286,16 @@ class _AggregatedTileEmbeddingsTransformMixin:
             **transform_model_args,
         )
 
+        fp_transform_model = self.fp_transform_model
+        if fp_transform_model is not None:
+            joblib.dump(transform_model, fp_transform_model)
+
+        return da_emb
+
+    @property
+    def transform_model_path(self):
+        transform_model_args = dict(self.embedding_transform_args)
+
         if "pretrained_model" not in transform_model_args:
             if self.__class__.__module__ == "convml_data.pipeline.embeddings.sampling":
                 embedding_model_path = self.model_path
@@ -302,9 +312,10 @@ class _AggregatedTileEmbeddingsTransformMixin:
 
             fn = f"{emb_model_name}.{self.transform_name}.joblib"
             fp_transform_model = Path(embedding_model_path).parent / fn
-            joblib.dump(transform_model, fp_transform_model)
+        else:
+            fp_transform_model = None
 
-        return da_emb
+        return fp_transform_model
 
     @property
     def transform_name(self):
