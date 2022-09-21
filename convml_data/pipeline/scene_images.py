@@ -14,11 +14,6 @@ class SceneImageMixin(object):
             product = self.data_source.aux_products[self.aux_name]["type"]
             product_name = self.aux_name
 
-        if source_name == "goes16" and product == "truecolor_rgb":
-            # to be able to create a RGB image with satpy we need to set the
-            # attrs again to ensure we get a proper RGB image
-            da_scene.attrs.update(da_src.attrs)
-
         # if self.aux_name is not None:
         # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
         img_domain = create_source_image(

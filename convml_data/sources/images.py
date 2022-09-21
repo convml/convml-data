@@ -129,6 +129,7 @@ def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
         img_domain = Image.fromarray(rgb_values)
     elif source_name == "goes16":
         if product == "truecolor_rgb" and "bands" in da_scene.coords:
+            da_scene.attrs.update(dict(standard_name="true_color"))
             img_domain = goes16.satpy_rgb.rgb_da_to_img(da=da_scene)
         elif product.startswith("multichannel__") or product.startswith(
             "singlechannel__"

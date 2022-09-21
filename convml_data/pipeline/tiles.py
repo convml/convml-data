@@ -9,7 +9,14 @@ from ..sampling import domain as sampling_domain
 from ..utils.luigi import DBTarget, XArrayTarget, YAMLTarget
 from . import trajectory_tiles, triplets
 from .aux_sources import CheckForAuxiliaryFiles
-from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
+from .rect import tiles as rect_tiles
+from .regridding import SceneRegriddedData
+from .sampling import (
+    CropSceneSourceFiles,
+    GenerateSceneIDs,
+    SceneSourceFiles,
+    _SceneRectSampleBase,
+)
 from .scene_images import SceneImageMixin
 
 
@@ -17,12 +24,17 @@ class TilesInScene(luigi.Task):
     data_path = luigi.Parameter(default=".")
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
+    extra_args = luigi.DictParameter(default={})
 
     def requires(self):
         if self.tiles_kind == "triplets":
             return triplets.TripletSceneSplits(data_path=self.data_path)
         if self.tiles_kind == "trajectories":
             return trajectory_tiles.TilesPerScene(data_path=self.data_path)
+        if self.tiles_kind == "rect-slidingwindow":
+            return rect_tiles.TilesPerRectScene(
+                data_path=self.data_path, **dict(self.extra_args)
+            )
 
         raise NotImplementedError(self.tiles_kind)
 
@@ -46,6 +58,7 @@ class SceneTileLocations(luigi.Task):
     data_path = luigi.Parameter(default=".")
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
+    extra_args = luigi.DictParameter(default={})
 
     @property
     def data_source(self):
@@ -57,6 +70,7 @@ class SceneTileLocations(luigi.Task):
                 scene_id=self.scene_id,
                 data_path=self.data_path,
                 tiles_kind=self.tiles_kind,
+                extra_args=self.extra_args,
             ),
         )
 
@@ -87,6 +101,8 @@ class SceneTileLocations(luigi.Task):
                 )
             elif self.tiles_kind == "trajectories":
                 tile_locations = tiles_meta
+            elif self.tiles_kind == "rect-slidingwindow":
+                tile_locations = tiles_meta
             else:
                 raise NotImplementedError(self.tiles_kind)
         else:
@@ -105,12 +121,16 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
     tiles_kind = luigi.Parameter()
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
+    extra_args = luigi.DictParameter(default={})
 
     def requires(self):
         reqs = super().requires()
 
         reqs["tile_locations"] = SceneTileLocations(
-            data_path=self.data_path, scene_id=self.scene_id, tiles_kind=self.tiles_kind
+            data_path=self.data_path,
+            scene_id=self.scene_id,
+            tiles_kind=self.tiles_kind,
+            extra_args=self.extra_args,
         )
 
         return reqs
@@ -165,6 +185,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
 
     tiles_kind = luigi.Parameter()
     aux_name = luigi.OptionalParameter(default=None)
+    extra_args = luigi.DictParameter(default={})
 
     @property
     def data_source(self):
@@ -174,23 +195,35 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
         data_source = self.data_source
 
         reqs = {}
-        if isinstance(data_source.domain, sampling_domain.SourceDataDomain):
-            reqs["source_data"] = SceneSourceFiles(
+        if self.tiles_kind == "rect-slidingwindow":
+            reqs["source_data"] = SceneRegriddedData(
                 scene_id=self.scene_id,
-                data_path=self.data_path,
                 aux_name=self.aux_name,
             )
+        elif self.tiles_kind in ["trajectories", "triplets"]:
+            if isinstance(data_source.domain, sampling_domain.SourceDataDomain):
+                reqs["source_data"] = SceneSourceFiles(
+                    scene_id=self.scene_id,
+                    data_path=self.data_path,
+                    aux_name=self.aux_name,
+                )
+            else:
+                reqs["source_data"] = CropSceneSourceFilesForTiles(
+                    scene_id=self.scene_id,
+                    data_path=self.data_path,
+                    pad_ptc=self.crop_pad_ptc,
+                    tiles_kind=self.tiles_kind,
+                    aux_name=self.aux_name,
+                    extra_args=self.extra_args,
+                )
         else:
-            reqs["source_data"] = CropSceneSourceFilesForTiles(
-                scene_id=self.scene_id,
-                data_path=self.data_path,
-                pad_ptc=self.crop_pad_ptc,
-                tiles_kind=self.tiles_kind,
-                aux_name=self.aux_name,
-            )
+            raise NotImplementedError(self.tiles_kind)
 
         reqs["tile_locations"] = SceneTileLocations(
-            data_path=self.data_path, scene_id=self.scene_id, tiles_kind=self.tiles_kind
+            data_path=self.data_path,
+            scene_id=self.scene_id,
+            tiles_kind=self.tiles_kind,
+            extra_args=self.extra_args,
         )
 
         return reqs
@@ -215,19 +248,24 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
         tile_N = data_source.sampling[self.tiles_kind].get("tile_N")
 
         for tile_identifier, tile_domain, tile_meta in self.tile_domains:
-            method = "nearest_s2d"
-            da_tile = rc.resample(domain=tile_domain, da=da_src, dx=dx, method=method)
-            if tile_N is not None:
-                img_shape = (int(da_tile.x.count()), int(da_tile.y.count()))
-                if img_shape[0] != tile_N or img_shape[1] != tile_N:
-                    raise Exception(
-                        "Regridder returned a tile with incorrect shape "
-                        f"({tile_N}, {tile_N}) != {img_shape}"
-                    )
+            if self.tiles_kind == "rect-slidingwindow":
+                da_tile = da_src.isel(**tile_domain)
+            else:
+                method = "nearest_s2d"
+                da_tile = rc.resample(
+                    domain=tile_domain, da=da_src, dx=dx, method=method
+                )
+                if tile_N is not None:
+                    img_shape = (int(da_tile.x.count()), int(da_tile.y.count()))
+                    if img_shape[0] != tile_N or img_shape[1] != tile_N:
+                        raise Exception(
+                            "Regridder returned a tile with incorrect shape "
+                            f"({tile_N}, {tile_N}) != {img_shape}"
+                        )
 
             if self.aux_name is not None:
                 da_tile.name = self.aux_name
-                da_tile.attrs.update(da_src.attrs)
+            da_tile.attrs.update(da_src.attrs)
 
             tile_output = self.output()[tile_identifier]
             Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
@@ -242,7 +280,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
                     # trollimage.xrimage.XRImage doesn't have a `.size`
                     # attribute like PIL.Image does, but it does have `.data`
                     # which has a shape
-                    _, *image_shape = img_tile.data.shape
+                    _, *img_shape = img_tile.data.shape
 
                 if img_shape[0] != tile_N or img_shape[1] != tile_N:
                     raise Exception(
@@ -262,6 +300,8 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
             tile_identifier_format = triplets.TILE_IDENTIFIER_FORMAT
         elif self.tiles_kind == "trajectories":
             tile_identifier_format = trajectory_tiles.TILE_IDENTIFIER_FORMAT
+        elif self.tiles_kind == "rect-slidingwindow":
+            tile_identifier_format = rect_tiles.TILE_IDENTIFIER_FORMAT
         else:
             raise NotImplementedError(self.tiles_kind)
 
@@ -272,8 +312,14 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
         tiles_meta = self.input()["tile_locations"].open()
 
         for tile_meta in tiles_meta:
-            tile_domain = rc.deserialise_domain(tile_meta["loc"])
             tile_identifier = self.tile_identifier_format.format(**tile_meta)
+            if self.tiles_kind == "rect-slidingwindow":
+                tile_domain = dict(
+                    x=slice(tile_meta["i0"], tile_meta["imax"]),
+                    y=slice(tile_meta["j0"], tile_meta["jmax"]),
+                )
+            else:
+                tile_domain = rc.deserialise_domain(tile_meta["loc"])
 
             yield tile_identifier, tile_domain, tile_meta
 
@@ -281,6 +327,8 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
         if self.tiles_kind == "triplets":
             tile_collection_name = tile_meta["triplet_collection"]
         elif self.tiles_kind == "trajectories":
+            tile_collection_name = None
+        elif self.tiles_kind == "rect-slidingwindow":
             tile_collection_name = None
         else:
             raise NotImplementedError(self.tiles_kind)
@@ -378,6 +426,7 @@ class GenerateTiles(luigi.Task):
     data_path = luigi.Parameter(default=".")
     tiles_kind = luigi.Parameter()
     aux_name = luigi.OptionalParameter(default=None)
+    extra_args = luigi.DictParameter(default={})
 
     @property
     def data_source(self):
@@ -393,6 +442,14 @@ class GenerateTiles(luigi.Task):
             tasks["tiles_per_scene"] = trajectory_tiles.TilesPerScene(
                 data_path=self.data_path
             )
+        elif self.tiles_kind == "rect-slidingwindow":
+            if "step_size" not in self.extra_args:
+                raise Exception(
+                    "To generate sliding-window tiles on the regridded domain"
+                    " `step_size` must be provided in `extra_args`"
+                )
+            tasks["scene_sources"] = GenerateSceneIDs(data_path=self.data_path)
+
         else:
             raise NotImplementedError(self.tiles_kind)
 
@@ -404,13 +461,16 @@ class GenerateTiles(luigi.Task):
         return tasks
 
     def run(self):
-        tiles_per_scene = self.input()["tiles_per_scene"].open()
-        scene_ids = list(tiles_per_scene.keys())
+        if self.tiles_kind in ["triplets", "trajectories"]:
+            # exclude scene ids without a tile
+            tiles_per_scene = self.input()["tiles_per_scene"].open()
+            scene_ids = list(tiles_per_scene.keys())
 
-        # exclude scene ids without a tile
-        scene_ids = [
-            scene_id for scene_id in scene_ids if len(tiles_per_scene[scene_id]) > 0
-        ]
+            scene_ids = [
+                scene_id for scene_id in scene_ids if len(tiles_per_scene[scene_id]) > 0
+            ]
+        else:
+            scene_ids = self.input()["scene_sources"].open().keys()
 
         if "aux_scenes" in self.input():
             aux_scene_ids = list(self.input()["aux_scenes"].open().keys())
@@ -424,6 +484,7 @@ class GenerateTiles(luigi.Task):
                 scene_id=scene_id,
                 tiles_kind=self.tiles_kind,
                 aux_name=self.aux_name,
+                extra_args=self.extra_args,
             )
 
         yield tasks_tiles
