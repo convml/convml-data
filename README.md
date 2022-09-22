@@ -108,6 +108,21 @@ source: ceres
 type: goes16n__approximate_toa_net_radiation_flux
 ```
 
+The full set of variables from there `ceres` source is:  '`reflectance_vis`,
+`visible_count`, `reflec_vis_137`, `temperature_sir`, `temperature_67`,
+`temperature_ir`, `temperature_sw`, `broadband_shortwave_albedo`,
+`broadband_longwave_flux`, `cloud_ir_emittance`, `cloud_phase`,
+`cloud_visible_optical_depth`, `cloud_particle_size`, `cloud_lwp_iwp`,
+`cloud_effective_temperature`, `cloud_top_pressure`,
+`cloud_effective_pressure`, `cloud_bottom_pressure`, `cloud_top_height`,
+`cloud_effective_height`, `cloud_bottom_height`, `cloud_top_temperature`,
+`cloud_bottom_temperature`, `pixel_skin_temperature`, `pixel_sza`, `pixel_vza`,
+`pixel_aza`, `visible_count_08`, `visible_count_16`, `visible_count_23`,
+`temperature_87` and `temperature_133`', including `broadband_shortwave_flux`
+derived from `broadband_shortwave_albedo` and
+`approximate_toa_net_radiation_flux` from `broadband_longwave_flux` and
+`broadband_shortwave_flux`.
+
 
 ## The timespan of your data-source
 
