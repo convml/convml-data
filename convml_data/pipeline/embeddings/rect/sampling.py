@@ -17,7 +17,6 @@ from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
 from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
 from ..defaults import PREDICTION_BATCH_SIZE
 from ..sampling_base import make_embedding_name
-from .defaults import SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS
 
 
 class SlidingWindowImageEmbeddings(luigi.Task):
@@ -31,9 +30,7 @@ class SlidingWindowImageEmbeddings(luigi.Task):
     model_path = luigi.Parameter()
     image_path = luigi.Parameter()
     src_data_path = luigi.OptionalParameter()
-    step_size = luigi.IntParameter(
-        default=SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS["step_size"]
-    )
+    step_size = luigi.IntParameter()
     prediction_batch_size = luigi.IntParameter(PREDICTION_BATCH_SIZE)
 
     def run(self):

@@ -169,63 +169,52 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
 
     def requires(self):
-        if self.tiles_kind == "rect-slidingwindow":
-            return SceneSlidingWindowEmbeddingsAuxFieldRegridding(
-                data_path=self.data_path,
-                scene_id=self.scene_id,
-                aux_name=self.aux_name,
-                embedding_model_path=self.embedding_model_path,
-                embedding_model_args=self.embedding_model_args,
-            )
-        else:
-            tasks = {}
-            tasks["aux"] = SceneTilesData(
-                data_path=self.data_path,
-                aux_name=self.aux_name,
-                scene_id=self.scene_id,
-                tiles_kind=self.tiles_kind,
-            )
-            tasks["embeddings"] = SceneTileEmbeddings(
-                data_path=self.data_path,
-                scene_id=self.scene_id,
-                tiles_kind=self.tiles_kind,
-                model_path=self.embedding_model_path,
-                model_args=self.embedding_model_args,
-            )
-            return tasks
+        tasks = {}
+        tasks["aux"] = SceneTilesData(
+            data_path=self.data_path,
+            aux_name=self.aux_name,
+            scene_id=self.scene_id,
+            tiles_kind=self.tiles_kind,
+        )
+        tasks["embeddings"] = SceneTileEmbeddings(
+            data_path=self.data_path,
+            scene_id=self.scene_id,
+            tiles_kind=self.tiles_kind,
+            model_path=self.embedding_model_path,
+            model_args=self.embedding_model_args,
+        )
+        return tasks
 
     def run(self):
-        if self.tiles_kind == "rect-slidingwindow":
-            pass
-        elif self.tiles_kind == "triplets":
-            aux_fields = self.input()["aux"]
-            da_embs = self.input()["embeddings"].open()
+        aux_fields = self.input()["aux"]
+        da_embs = self.input()["embeddings"].open()
 
-            if da_embs.count() == 0:
-                ds = xr.Dataset()
-            else:
-                values = []
-                for triplet_tile_id in da_embs.triplet_tile_id.values:
-                    da_tile_aux = aux_fields[triplet_tile_id]["data"].open()
-                    da_tile_aux_value = da_tile_aux.mean(keep_attrs=True)
-                    da_tile_aux_value.attrs["long_name"] = (
-                        "tile mean " + da_tile_aux_value.long_name
-                    )
-                    da_tile_aux_value["triplet_tile_id"] = triplet_tile_id
-                    values.append(da_tile_aux_value)
-
-                da_aux_values = xr.concat(values, dim="triplet_tile_id")
-                ds = xr.merge([da_embs, da_aux_values])
-
-            Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
-            ds.to_netcdf(self.output().path)
+        if da_embs.count() == 0:
+            ds = xr.Dataset()
         else:
-            raise NotImplementedError(self.tiles_kind)
+            if self.tiles_kind == "triplets":
+                concat_dim = "triplet_tile_id"
+            else:
+                concat_dim = "tile_id"
+
+            values = []
+
+            for t_id in da_embs[concat_dim].values:
+                da_tile_aux = aux_fields[t_id]["data"].open()
+                da_tile_aux_value = da_tile_aux.mean(keep_attrs=True)
+                da_tile_aux_value.attrs["long_name"] = (
+                    "tile mean " + da_tile_aux_value.long_name
+                )
+                da_tile_aux_value[concat_dim] = t_id
+                values.append(da_tile_aux_value)
+
+            da_aux_values = xr.concat(values, dim=concat_dim)
+            ds = xr.merge([da_embs, da_aux_values])
+
+        Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
+        ds.to_netcdf(self.output().path)
 
     def output(self):
-        if self.tiles_kind == "rect-slidingwindow":
-            return self.input()
-
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_path=self.embedding_model_path,
