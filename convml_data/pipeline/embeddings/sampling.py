@@ -269,7 +269,7 @@ class DatasetScenesTileEmbeddings(SceneBulkProcessingBaseTask):
 
 def make_transform_name(transform, **transform_args):
     if "pretrained_model" in transform_args:
-        return transform_args["pretrained_model"]
+        return transform_args["pretrained_model"].replace("/", "__")
 
     if transform is None:
         return None
@@ -313,9 +313,8 @@ class _AggregatedTileEmbeddingsTransformMixin:
             **transform_model_args,
         )
 
-        fp_transform_model = self.fp_transform_model
-        if fp_transform_model is not None:
-            joblib.dump(transform_model, fp_transform_model)
+        if self.transform_model_path is not None:
+            joblib.dump(transform_model, self.transform_model_path)
 
         return da_emb
 

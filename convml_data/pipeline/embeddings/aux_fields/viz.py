@@ -104,7 +104,7 @@ class AggPlotBaseTask(luigi.Task):
         if self.embedding_transform is not None:
             emb_name += "." + make_transform_name(
                 transform=self.embedding_transform,
-                transform_args=self.embedding_transform_args,
+                **self.embedding_transform_args,
             )
 
         dataset_name = Path(self.datapath).absolute().stem
@@ -150,11 +150,13 @@ class AggPlotBaseTask(luigi.Task):
         if self.embedding_transform is not None:
             transform_model_args = dict(self.embedding_transform_args)
             if "pretrained_model" in transform_model_args:
-                transform_name = transform_model_args["pretrained_model"]
+                transform_name = transform_model_args["pretrained_model"].replace(
+                    "/", "__"
+                )
             else:
                 transform_name = make_transform_name(
                     transform=self.embedding_transform,
-                    transform_args=self.embedding_transform_args,
+                    **self.embedding_transform_args,
                 )
             if transform_name != emb_name:
                 name_parts.append("transformed")

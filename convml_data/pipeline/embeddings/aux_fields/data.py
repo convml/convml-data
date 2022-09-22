@@ -167,8 +167,8 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
     def run(self):
         if self.embedding_transform is None:
             datasets = []
-            if self.tiles_kind == "rect-slidingwindow":
-                concat_dim = "scene_id"
+            if self.tiles_kind in ["trajectories", "rect-slidingwindow"]:
+                concat_dim = "tile_id"
             elif self.tiles_kind == "triplets":
                 concat_dim = "triplet_tile_id"
             else:
@@ -184,6 +184,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
                 datasets.append(ds_scene)
 
             ds = xr.concat(datasets, dim=concat_dim)
+
             if "stage" in ds.data_vars:
                 ds = ds.set_coords(["stage", "scene_id"])
             else:
