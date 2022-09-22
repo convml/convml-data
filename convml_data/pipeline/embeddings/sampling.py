@@ -9,16 +9,14 @@ from convml_tt.interpretation.embedding_transforms import apply_transform
 from convml_tt.system import TripletTrainerModel
 from convml_tt.utils import get_embeddings
 
+from ... import DataSource
 from ...utils.luigi import XArrayTarget
 from ..sampling import GenerateSceneIDs
 from ..tiles import SceneTilesData
 from ..triplets import TripletSceneSplits
 from ..utils import SceneBulkProcessingBaseTask
 from .defaults import PREDICTION_BATCH_SIZE
-from .rect.sampling import (  # noqa
-    SLIDING_WINDOW_EMBEDDINGS_DEFAULT_KWARGS,
-    SceneSlidingWindowImageEmbeddings,
-)
+from .rect.sampling import SceneSlidingWindowImageEmbeddings  # noqa
 from .sampling_base import make_embedding_name
 
 
@@ -146,6 +144,10 @@ class SceneTileEmbeddings(luigi.Task):
     model_path = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
+    @property
+    def datasource(self):
+        return DataSource.load(path=self.data_path)
+
     def requires(self):
         fp_model = Path(self.model_path)
         fp_model_expected = Path(self.data_path) / "embedding_models"
@@ -153,10 +155,20 @@ class SceneTileEmbeddings(luigi.Task):
             raise Exception(f"embedding models should be stored in {fp_model_expected}")
 
         if self.tiles_kind == "rect-slidingwindow":
+            sampling_meta = self.datasource.sampling
+            sampling_sw = sampling_meta.get("rect-slidingwindow")
+            if sampling_sw is None or sampling_sw.get("tile_N") is None:
+                raise Exception(
+                    "Please define the tile-size, in pixels `tile_N` in "
+                    " a section called `rect-slidingwindow` in `meta.yaml`"
+                )
+            N_tile = int(sampling_sw["tile_N"])
+
             return SceneSlidingWindowImageEmbeddings(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 model_path=self.model_path,
+                N_tile=N_tile,
                 **dict(self.model_args),
             )
         elif self.tiles_kind == "triplets":

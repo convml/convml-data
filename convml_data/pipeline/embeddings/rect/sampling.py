@@ -14,7 +14,7 @@ from convml_tt.utils import get_embeddings
 from .... import DataSource
 from ....utils.luigi import XArrayTarget
 from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
-from ...rect.tiles import DatasetScenesSlidingWindowImageTiles
+from ...rect.tiles import TILE_IDENTIFIER_FORMAT, DatasetScenesSlidingWindowImageTiles
 from ..defaults import PREDICTION_BATCH_SIZE
 from ..sampling_base import make_embedding_name
 
@@ -32,12 +32,12 @@ class SlidingWindowImageEmbeddings(luigi.Task):
     src_data_path = luigi.OptionalParameter()
     step_size = luigi.IntParameter()
     prediction_batch_size = luigi.IntParameter(PREDICTION_BATCH_SIZE)
+    N_tile = luigi.IntParameter()
 
     def run(self):
         model = TripletTrainerModel.load_from_checkpoint(self.model_path)
         model.freeze()
 
-        N_tile = (256, 256)
         model_transforms = get_model_transforms(
             step="predict", normalize_for_arch=model.base_arch
         )
@@ -53,7 +53,7 @@ class SlidingWindowImageEmbeddings(luigi.Task):
             data_dir=Path(self.image_path).parent,
             transform=model_transforms,
             step=(self.step_size, self.step_size),
-            N_tile=N_tile,
+            N_tile=(self.N_tile, self.N_tile),
             filter_func=_only_include_scene_tiles,
         )
 
@@ -75,13 +75,29 @@ class SlidingWindowImageEmbeddings(luigi.Task):
             Ny = len(da_src.y)
             da_pred["y"] = da_src.y.isel(y=Ny - da_pred.j0)
 
+            if hasattr(self, "scene_id"):
+                scene_tile_ids = [
+                    TILE_IDENTIFIER_FORMAT.format(
+                        scene_id=self.scene_id, tile_id=tile_id
+                    )
+                    for tile_id in da_pred.tile_id.values
+                ]
+                da_pred["scene_tile_id"] = xr.DataArray(
+                    scene_tile_ids,
+                    coords=dict(tile_id=da_pred.tile_id),
+                    dims=("tile_id",),
+                )
+
             da_pred = da_pred.set_index(tile_id=("x", "y")).unstack("tile_id")
-            da_pred.attrs["lx_tile"] = float(da_src.x[N_tile[0]] - da_src.x[0])
-            da_pred.attrs["ly_tile"] = float(da_src.y[N_tile[1]] - da_src.y[0])
+            da_pred.attrs["lx_tile"] = float(da_src.x[self.N_tile] - da_src.x[0])
+            da_pred.attrs["ly_tile"] = float(da_src.y[self.N_tile] - da_src.y[0])
 
             # make sure the lat lon coords are available later
             da_pred.coords["lat"] = da_src.lat.sel(x=da_pred.x, y=da_pred.y)
             da_pred.coords["lon"] = da_src.lon.sel(x=da_pred.x, y=da_pred.y)
+
+            if hasattr(self, "scene_id"):
+                da_pred = da_pred.rename(dict(scene_tile_id="tile_id"))
 
         da_pred.attrs["model_path"] = self.model_path
         da_pred.attrs["image_path"] = self.image_path
