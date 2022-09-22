@@ -108,7 +108,7 @@ source: ceres
 type: goes16n__approximate_toa_net_radiation_flux
 ```
 
-The full set of variables from there `ceres` source is:  '`reflectance_vis`,
+The full set of variables from the `ceres` source is:  '`reflectance_vis`,
 `visible_count`, `reflec_vis_137`, `temperature_sir`, `temperature_67`,
 `temperature_ir`, `temperature_sw`, `broadband_shortwave_albedo`,
 `broadband_longwave_flux`, `cloud_ir_emittance`, `cloud_phase`,
