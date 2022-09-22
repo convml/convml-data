@@ -114,6 +114,10 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
                     domain=domain, da=da_src.lon, dx=dx, method=method
                 )
 
+            # copy over attrs so we keep the long_name and units
+            # if they exists on the source
+            da_domain.attrs.update(da_src.attrs)
+
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
         else:

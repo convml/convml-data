@@ -75,15 +75,22 @@ class SlidingWindowImageEmbeddings(luigi.Task):
             Ny = len(da_src.y)
             da_pred["y"] = da_src.y.isel(y=Ny - da_pred.j0)
 
+            # when we unstack below we'll lose `tile_id`, so we make a copy here
+            da_pred["tile_id_copy"] = da_pred.tile_id.copy()
+
             if hasattr(self, "scene_id"):
-                scene_tile_ids = [
+                # if the tiles belong to a dataset of many scenes we need to
+                # make a global id which is unique across all scenes. This will
+                # become the new `tile_id` below and the old `tile_id` (which
+                # is only for this scene) becomes the `scene_tile_id`
+                global_tile_ids = [
                     TILE_IDENTIFIER_FORMAT.format(
                         scene_id=self.scene_id, tile_id=tile_id
                     )
                     for tile_id in da_pred.tile_id.values
                 ]
-                da_pred["scene_tile_id"] = xr.DataArray(
-                    scene_tile_ids,
+                da_pred["global_tile_id"] = xr.DataArray(
+                    global_tile_ids,
                     coords=dict(tile_id=da_pred.tile_id),
                     dims=("tile_id",),
                 )
@@ -96,8 +103,12 @@ class SlidingWindowImageEmbeddings(luigi.Task):
             da_pred.coords["lat"] = da_src.lat.sel(x=da_pred.x, y=da_pred.y)
             da_pred.coords["lon"] = da_src.lon.sel(x=da_pred.x, y=da_pred.y)
 
-            if hasattr(self, "scene_id"):
-                da_pred = da_pred.rename(dict(scene_tile_id="tile_id"))
+            if not hasattr(self, "scene_id"):
+                da_pred = da_pred.rename(dict(tile_id_copy="tile_id"))
+            else:
+                da_pred = da_pred.rename(
+                    dict(tile_id_copy="scene_tile_id", global_tile_id="tile_id")
+                )
 
         da_pred.attrs["model_path"] = self.model_path
         da_pred.attrs["image_path"] = self.image_path

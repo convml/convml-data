@@ -40,11 +40,16 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
     def requires(self):
         tasks = {}
+        aux_kwargs = {}
+        if self.tiles_kind == "rect-slidingwindow":
+            aux_kwargs["step_size"] = self.embedding_model_args["step_size"]
+
         tasks["aux"] = SceneTilesData(
             data_path=self.data_path,
             aux_name=self.aux_name,
             scene_id=self.scene_id,
             tiles_kind=self.tiles_kind,
+            extra_args=aux_kwargs,
         )
         tasks["embeddings"] = SceneTileEmbeddings(
             data_path=self.data_path,
@@ -66,6 +71,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 concat_dim = "triplet_tile_id"
             else:
                 concat_dim = "tile_id"
+                da_embs = da_embs.stack(n=("x", "y")).swap_dims(n="tile_id").drop("n")
 
             values = []
 
