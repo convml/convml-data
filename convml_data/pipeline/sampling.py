@@ -8,6 +8,7 @@ import regridcart as rc
 
 from .. import DataSource
 from ..sources import build_fetch_tasks, extract_variable
+from ..sources.user_functions import get_user_function
 from ..utils.luigi import ImageTarget, XArrayTarget
 from .aux_sources import CheckForAuxiliaryFiles
 from .scene_images import SceneImageMixin
@@ -103,7 +104,7 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
             product_type = data_source.type
             product_name = self.data_source.name
             product_meta = dict(name=product_name)
-            if product_type == "user_function":
+            if product_type in ["image_user_function", "data_user_function"]:
                 if "input" not in self.data_source._meta:
                     raise Exception(
                         "To use a user-function on the primary data-set being"
@@ -136,10 +137,11 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         )
 
         if source_name == "goes16":
+            # crop done inside `extract_variable`
             da_cropped = da_full
             coords = rc.coords.get_latlon_coords_using_crs(da=da_cropped)
-            # XXX: this is causing extra computation and didn't need to be
-            # useful. I need to work out why satpy or something else isn't
+            # XXX: this is causing extra computation and didn't used to be
+            # needed. I need to work out why satpy or something else isn't
             # including that lat/lon variables when interpolating
             da_cropped["lat"] = coords["lat"]
             da_cropped["lon"] = coords["lon"]
@@ -147,6 +149,17 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
             da_cropped = rc.crop_field_to_domain(
                 domain=domain, da=da_full, pad_pct=self.pad_ptc
             )
+
+        if product_type == "data_user_function":
+            user_function = get_user_function(
+                context=dict(datasource_path=self.data_path, product_name=product_name)
+            )
+            da_cropped = user_function(da_cropped)
+
+            # retain the grid-mapping if present in the source
+            if "grid_mapping" in da_full.attrs:
+                da_cropped.attrs["grid_mapping"] = da_full.grid_mapping
+                da_cropped[da_cropped.grid_mapping] = da_full[da_full.grid_mapping]
 
         if "image" in self.output():
             img_cropped = self._create_image(da_scene=da_cropped, da_src=da_full)
@@ -168,7 +181,11 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         else:
             source_type = self.data_source.aux_products[self.aux_name]["type"]
             source_name = self.data_source.aux_products[self.aux_name]["source"]
-            output_path = output_path / source_name / source_type
+            if source_type == "data_user_function":
+                product_name = f"{source_type}__{self.aux_name}"
+            else:
+                product_name = source_type
+            output_path = output_path / source_name / product_name
 
         output_path = output_path / "cropped"
 
@@ -180,7 +197,12 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         fn_data = f"{self.scene_id}.nc"
         outputs = dict(data=XArrayTarget(str(data_path / fn_data)))
 
-        if self.create_image:
+        if self.aux_name is None:
+            product_type = self.data_source.type
+        else:
+            product_type = self.data_source.aux_products[self.aux_name]["type"]
+
+        if self.create_image and product_type != "data_user_function":
             fn_image = f"{self.scene_id}.png"
             outputs["image"] = ImageTarget(str(data_path / fn_image))
 

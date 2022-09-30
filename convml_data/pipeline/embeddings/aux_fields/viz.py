@@ -31,7 +31,7 @@ class AggPlotBaseTask(luigi.Task):
     column_function = luigi.Parameter(default=None)
     segments_filepath = luigi.Parameter(default=None)
     segmentation_threshold = luigi.FloatParameter(default=0.0005)
-    reduce_op = luigi.Parameter(default="mean")
+    tile_reduction_op = luigi.Parameter(default="mean")
 
     filters = luigi.OptionalParameter(default=None)
 
@@ -46,6 +46,7 @@ class AggPlotBaseTask(luigi.Task):
             embedding_model_args=self.embedding_model_args,
             embedding_transform=self.embedding_transform,
             embedding_transform_args=self.embedding_transform_args,
+            tile_reduction_op=self.tile_reduction_op,
         )
         # kwargs = dict(
         #     scalar_name=self.aux_name,
@@ -78,12 +79,12 @@ class AggPlotBaseTask(luigi.Task):
     def run(self):
         ds = self.input().open()
         self._ds = ds  # for plot titles etc
-
-        scalar_dims = set(ds[self.aux_name].dims)
+        var_name = f"{self.aux_name}__{self.tile_reduction_op}"
+        scalar_dims = set(ds[var_name].dims)
         ds_stacked = ds.stack(sample=scalar_dims)
 
         emb_var = "emb"
-        emb_dim = set(ds.dims).difference(set(ds[self.aux_name].dims)).pop()
+        emb_dim = set(ds.dims).difference(set(ds[var_name].dims)).pop()
 
         # remove `explained_variance` since merging into a pandas DataFrame
         # later otherwise doesn't work (since the different components will
@@ -91,9 +92,11 @@ class AggPlotBaseTask(luigi.Task):
         if "explained_variance" in ds_stacked:
             ds_stacked = ds_stacked.drop("explained_variance")
 
-        self._make_plot(ds_stacked=ds_stacked, emb_var=emb_var, emb_dim=emb_dim)
+        self._make_plot(
+            ds_stacked=ds_stacked, emb_var=emb_var, emb_dim=emb_dim, var_name=var_name
+        )
 
-    def _make_plot(self, ds_stacked, emb_var, emb_dim):
+    def _make_plot(self, ds_stacked, emb_var, emb_dim, var_name):
         raise NotImplementedError
 
     def _make_title(self):
@@ -122,7 +125,7 @@ class AggPlotBaseTask(luigi.Task):
             agg_parts.append(self.column_function)
 
         if self.segments_filepath is not None or getattr(self, "n_scalar_bins", None):
-            agg_parts.append(f"{self.reduce_op} of ")
+            agg_parts.append(f"{self.tile_reduction_op} of ")
 
         if self.segments_filepath is not None:
             segmentation_id = Path(self.segments_filepath).name.replace(".nc", "")
@@ -178,8 +181,7 @@ class AggPlotBaseTask(luigi.Task):
         if self.segments_filepath is not None:
             name_parts.append(f"{self.segmentation_threshold}seg")
 
-        if self.segments_filepath is not None or self.column_function is not None:
-            name_parts.append(self.reduce_op)
+        name_parts.append(self.tile_reduction_op)
 
         return name_parts
 
@@ -197,9 +199,9 @@ class ColumnScalarEmbeddingScatterPlot(AggPlotBaseTask):
 
     def reduce(self, da):
         try:
-            return getattr(da, self.reduce_op)()
+            return getattr(da, self.tile_reduction_op)()
         except AttributeError:
-            raise NotImplementedError(self.reduce_op)
+            raise NotImplementedError(self.tile_reduction_op)
 
     def _build_output_name_parts(self):
         name_parts = super()._build_output_name_parts()
@@ -374,11 +376,11 @@ class ColumnScalarEmbeddingDistPlot(AggPlotBaseTask):
     dx = luigi.OptionalFloatParameter(default=0.1)
     dy = luigi.OptionalParameter(default="dx")
 
-    def _make_plot(self, ds_stacked, emb_var, emb_dim):
+    def _make_plot(self, ds_stacked, emb_var, emb_dim, var_name):
         data = {
             f"{emb_dim}=0": ds_stacked[emb_var].sel({emb_dim: 0}),
             f"{emb_dim}=1": ds_stacked[emb_var].sel({emb_dim: 1}),
-            self.aux_name: ds_stacked[self.aux_name],
+            var_name: ds_stacked[var_name],
         }
         ds = xr.Dataset(data)
         ds[f"{emb_dim}=0"].attrs["units"] = "1"
@@ -392,7 +394,7 @@ class ColumnScalarEmbeddingDistPlot(AggPlotBaseTask):
             ds=ds,
             x=f"{emb_dim}=0",
             y=f"{emb_dim}=1",
-            v=self.aux_name,
+            v=var_name,
             dx=dx,
             dy=dy,
             cmap="jet",

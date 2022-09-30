@@ -10,9 +10,12 @@ auxiliary scalar field. There are a few ways this co-location is done:
    individual points. These embeddings are then interpolated onto the grid of
    the auxiliary fields.
 """
+import importlib
+import inspect
 from pathlib import Path
 
 import luigi
+import numpy as np
 import xarray as xr
 
 from ...aux_sources import CheckForAuxiliaryFiles
@@ -38,6 +41,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     data_path = luigi.Parameter(default=".")
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
     create_aux_tile_images = luigi.BoolParameter(default=False)
+    tile_reduction_op = luigi.Parameter(default="mean")
 
     def requires(self):
         tasks = {}
@@ -62,6 +66,51 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
         )
         return tasks
 
+    def _get_reduction_op(self):
+        var_name = f"{self.aux_name}__{self.tile_reduction_op}"
+        if hasattr(np, self.tile_reduction_op):
+            op_fn = getattr(np, self.tile_reduction_op)
+
+            def reduction_op(da_tile):
+                v_long_name = f"tile {self.tile_reduction_op} {da_tile.long_name}"
+                da_tile_reduced = op_fn(da_tile)
+                da_tile_reduced.attrs["long_name"] = v_long_name
+                da_tile_reduced.attrs["units"] = da_tile.units
+                da_tile_reduced.name = var_name
+                return da_tile_reduced
+
+            return reduction_op
+
+        elif "__" in str(self.tile_reduction_op):
+            # e.g. `cloud_metrics__mask__iorg_objects` becomes `cloudmetrics.mask.iorg_objects(...)`
+            op_parts = self.tile_reduction_op.split("__")
+            module_name = ".".join(op_parts[:-1])
+            function_name = op_parts[-1]
+            module = importlib.import_module(module_name)
+            op_fn = getattr(module, function_name)
+            op_desc = " ".join(op_parts[1:])
+
+            argspec = inspect.getargspec(op_fn)
+            kwargs = dict()
+            if "periodic_domain" in argspec.args:
+                # assume that tiles don't represent data on a periodic domain
+                # since they've been sampled from a larger domain
+                kwargs["periodic_domain"] = False
+
+            def reduction_op(da_tile):
+                value = op_fn(da_tile, **kwargs)
+                long_name = f"{op_desc} on {da_tile.long_name}"
+                # I think most metrics are dimensionless
+                units = "1"
+                da_tile_reduced = xr.DataArray(
+                    value, attrs=dict(long_name=long_name, units=units), name=var_name
+                )
+                return da_tile_reduced
+
+            return reduction_op
+        else:
+            raise NotImplementedError(self.tile_reduction_op)
+
     def run(self):
         aux_fields = self.input()["aux"]
         da_embs = self.input()["embeddings"].open()
@@ -77,16 +126,25 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
             values = []
 
+            reduction_op = self._get_reduction_op()
+
             for t_id in da_embs[concat_dim].values:
                 da_tile_aux = aux_fields[t_id]["data"].open()
-                da_tile_aux_value = da_tile_aux.mean(keep_attrs=True)
-                da_tile_aux_value.attrs["long_name"] = (
-                    "tile mean " + da_tile_aux_value.long_name
-                )
+                da_tile_aux_value = reduction_op(da_tile_aux)
+                assert "long_name" in da_tile_aux_value.attrs
+                assert "units" in da_tile_aux_value.attrs
                 da_tile_aux_value[concat_dim] = t_id
                 values.append(da_tile_aux_value)
 
             da_aux_values = xr.concat(values, dim=concat_dim)
+
+            if (
+                "t" in da_embs.coords
+                and "t" in da_aux_values.coords
+                and not (da_embs.t == da_aux_values.t).all()
+            ):
+                da_embs = da_embs.rename(t="t_embs")
+
             ds = xr.merge([da_embs, da_aux_values])
 
         Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
@@ -104,6 +162,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             self.aux_name,
             "by",
             emb_name,
+            f"tile_{self.tile_reduction_op}",
         ]
 
         fn = ".".join(name_parts) + ".nc"
@@ -124,6 +183,7 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
 
     data_path = luigi.Parameter(default=".")
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
+    tile_reduction_op = luigi.Parameter(default="foobar")
 
     def _get_task_class_kwargs(self, scene_ids):
         return dict(
@@ -131,6 +191,7 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
             tiles_kind=self.tiles_kind,
             embedding_model_path=self.embedding_model_path,
             embedding_model_args=self.embedding_model_args,
+            tile_reduction_op=self.tile_reduction_op,
         )
 
     def _get_scene_ids_task_kwargs(self):
@@ -152,6 +213,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
+    tile_reduction_op = luigi.Parameter(default="mean")
 
     def requires(self):
         kwargs = dict(
@@ -160,6 +222,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             tiles_kind=self.tiles_kind,
             embedding_model_path=self.embedding_model_path,
             embedding_model_args=self.embedding_model_args,
+            tile_reduction_op=self.tile_reduction_op,
         )
         if self.embedding_transform is None:
             return DatasetScenesAuxFieldWithEmbeddings(**kwargs)
@@ -221,6 +284,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             self.aux_name,
             "by",
             emb_name,
+            f"tile_{self.tile_reduction_op}",
         ]
 
         transform_name = self.transform_name

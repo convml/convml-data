@@ -4,7 +4,6 @@ import numpy as np
 import xarray as xr
 
 from . import ceres, era5, goes16
-from . import images as source_images
 from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .images import rgb_image_from_scene_data as create_image  # noqa
 from .les import FindLESFiles, LESDataFile
@@ -21,7 +20,7 @@ def build_query_tasks(
             "singlechannel__"
         ):
             channels = list(goes16.parse_product_shorthand(source_type).keys())
-        elif source_type == "user_function":
+        elif source_type in ["image_user_function", "data_user_function"]:
             channels = get_user_function_source_input_names(product_meta=product_meta)
         else:
             raise NotImplementedError(source_type)
@@ -145,6 +144,33 @@ def get_time_for_filename(source_name, filename):
     return t
 
 
+def _extract_scene_data_for_user_function(task_input, product_meta, bbox_crop):
+    das = []
+    product_input = product_meta["input"]
+    for task_channel in task_input:
+        path = task_channel.path
+        file_meta = GOES16Query.parse_filename(filename=path)
+        channel_number = file_meta["channel"]
+
+        derived_variable = None
+        if isinstance(product_input, dict):
+            derived_variable = product_input[channel_number]
+
+        da = goes16.satpy_rgb.load_radiance_channel(
+            scene_fn=path,
+            channel_number=channel_number,
+            derived_variable=derived_variable,
+            bbox_crop=bbox_crop,
+        )
+        da["channel"] = channel_number
+        das.append(da)
+    # TODO: may need to do some regridding here if we try to stack
+    # channels with different spatial resolution
+    da = xr.concat(das, dim="channel")
+
+    return da
+
+
 def extract_variable(task_input, data_source, product, product_meta, bbox_crop=None):
     if data_source == "ceres":
         _, var_name = product.split("__")
@@ -200,28 +226,11 @@ def extract_variable(task_input, data_source, product, product_meta, bbox_crop=N
                 derived_variable=derived_variable,
                 channel_number=channel_number,
             )
-        elif product == "user_function":
-            das = []
-            product_input = product_meta["input"]
-            for task_channel in task_input:
-                path = task_channel.path
-                file_meta = GOES16Query.parse_filename(filename=path)
-                channel_number = file_meta["channel"]
+        elif product in ["image_user_function", "data_user_function"]:
+            da = _extract_scene_data_for_user_function(
+                task_input=task_input, product_meta=product_meta, bbox_crop=bbox_crop
+            )
 
-                derived_variable = None
-                if isinstance(product_input, dict):
-                    derived_variable = product_input[channel_number]
-
-                da = goes16.satpy_rgb.load_radiance_channel(
-                    scene_fn=path,
-                    channel_number=channel_number,
-                    derived_variable=derived_variable,
-                )
-                da["channel"] = channel_number
-                das.append(da)
-            # TODO: may need to do some regridding here if we try to stack
-            # channels with different spatial resolution
-            da = xr.concat(das, dim="channel")
         else:
             da = goes16.satpy_rgb.load_aux_file(scene_fn=task_input)
     elif data_source == "LES":

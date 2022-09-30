@@ -126,7 +126,9 @@ def load_aux_file(scene_fn):
     return da
 
 
-def load_radiance_channel(scene_fn, channel_number, derived_variable=None):
+def load_radiance_channel(
+    scene_fn, channel_number, derived_variable=None, bbox_crop=None
+):
     """
     satpy has implemented functionality to convert for example from radiance to
     brightness temperature, which can be selected by defining
@@ -148,6 +150,15 @@ def load_radiance_channel(scene_fn, channel_number, derived_variable=None):
 
     scene = satpy.Scene(reader="abi_l1b", filenames=[scene_fn])
     scene.load([var_name], calibration=calibration)
+
+    # use satpy's cropping for latlon-bbox crop
+    if bbox_crop is not None:
+        if len(bbox_crop) != 4:
+            raise Exception(bbox_crop)
+        # satpy bbox: [WSEN]
+        scene = scene.crop(
+            ll_bbox=[bbox_crop[0], bbox_crop[2], bbox_crop[1], bbox_crop[3]]
+        )
 
     da = scene[var_name]
     if "crs" in da.coords:

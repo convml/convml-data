@@ -130,7 +130,10 @@ class CheckForAuxiliaryFiles(luigi.Task):
         data_source = self.data_source
         output = None
         aux_source_name = self.aux_source_name
-        aux_product_name = self.aux_product_name
+        if self.aux_product_name in ["data_user_function", "image_user_function"]:
+            aux_product_name = f"{self.aux_product_name}__{self.aux_name}"
+        else:
+            aux_product_name = self.aux_product_name
 
         if data_source.source == "goes16":
             p = (

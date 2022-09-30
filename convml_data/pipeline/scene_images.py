@@ -14,8 +14,6 @@ class SceneImageMixin(object):
             product = self.data_source.aux_products[self.aux_name]["type"]
             product_name = self.aux_name
 
-        # if self.aux_name is not None:
-        # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
         img_domain = create_source_image(
             da_scene=da_scene,
             source_name=source_name,
