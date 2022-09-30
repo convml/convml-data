@@ -124,8 +124,7 @@ class AggPlotBaseTask(luigi.Task):
         if self.column_function is not None:
             agg_parts.append(self.column_function)
 
-        if self.segments_filepath is not None or getattr(self, "n_scalar_bins", None):
-            agg_parts.append(f"{self.tile_reduction_op} of ")
+        agg_parts.append(self.tile_reduction_op)
 
         if self.segments_filepath is not None:
             segmentation_id = Path(self.segments_filepath).name.replace(".nc", "")
@@ -153,7 +152,7 @@ class AggPlotBaseTask(luigi.Task):
             model_path=self.embedding_model_path,
             **self.embedding_model_args,
         )
-        name_parts = [self.aux_name, "by", emb_name]
+        name_parts = [self.aux_name, self.tile_reduction_op, "by", emb_name]
 
         if self.embedding_transform is not None:
             transform_model_args = dict(self.embedding_transform_args)
@@ -180,8 +179,6 @@ class AggPlotBaseTask(luigi.Task):
 
         if self.segments_filepath is not None:
             name_parts.append(f"{self.segmentation_threshold}seg")
-
-        name_parts.append(self.tile_reduction_op)
 
         return name_parts
 
