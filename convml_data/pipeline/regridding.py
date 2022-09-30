@@ -39,6 +39,8 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
     Regrid the scene source data to a fixed Cartesian resolution
     """
 
+    create_image = luigi.BoolParameter(default=True)
+
     @property
     def data_source(self):
         return DataSource.load(path=self.data_path)
@@ -123,8 +125,9 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
         else:
             da_domain = domain_output["data"].open()
 
-        img_domain = self._create_image(da_scene=da_domain, da_src=da_src)
-        img_domain.save(str(domain_output["image"].fn))
+        if "image" in self.output():
+            img_domain = self._create_image(da_scene=da_domain, da_src=da_src)
+            img_domain.save(str(domain_output["image"].fn))
 
     def output(self):
         scene_data_path = Path(self.data_path) / "rect"
@@ -133,11 +136,14 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
             scene_data_path = scene_data_path / "aux" / self.aux_name
 
         fn_data = f"{self.scene_id}.nc"
-        fn_image = f"{self.scene_id}.png"
-        return dict(
+        outputs = dict(
             data=XArrayTarget(str(scene_data_path / fn_data)),
-            image=ImageTarget(str(scene_data_path / fn_image)),
         )
+
+        if self.create_image:
+            fn_image = f"{self.scene_id}.png"
+            outputs["image"] = ImageTarget(str(scene_data_path / fn_image))
+        return outputs
 
 
 class GenerateRegriddedScenes(SceneBulkProcessingBaseTask):

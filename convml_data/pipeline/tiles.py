@@ -186,6 +186,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
     tiles_kind = luigi.Parameter()
     aux_name = luigi.OptionalParameter(default=None)
     extra_args = luigi.DictParameter(default={})
+    create_images = luigi.BoolParameter(default=True)
 
     @property
     def data_source(self):
@@ -200,6 +201,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 aux_name=self.aux_name,
+                create_image=self.create_images,
             )
         elif self.tiles_kind in ["trajectories", "triplets"]:
             if isinstance(data_source.domain, sampling_domain.SourceDataDomain):
@@ -216,6 +218,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
                     tiles_kind=self.tiles_kind,
                     aux_name=self.aux_name,
                     extra_args=self.extra_args,
+                    create_image=self.create_images,
                 )
         else:
             raise NotImplementedError(self.tiles_kind)
@@ -272,23 +275,24 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
             Path(tile_output["data"].path).parent.mkdir(exist_ok=True, parents=True)
             tile_output["data"].write(da_tile)
 
-            img_tile = self._create_image(da_scene=da_tile, da_src=da_src)
+            if "image" in tile_output:
+                img_tile = self._create_image(da_scene=da_tile, da_src=da_src)
 
-            if tile_N is not None:
-                if hasattr(img_tile, "size"):
-                    img_shape = img_tile.size
-                else:
-                    # trollimage.xrimage.XRImage doesn't have a `.size`
-                    # attribute like PIL.Image does, but it does have `.data`
-                    # which has a shape
-                    _, *img_shape = img_tile.data.shape
+                if tile_N is not None:
+                    if hasattr(img_tile, "size"):
+                        img_shape = img_tile.size
+                    else:
+                        # trollimage.xrimage.XRImage doesn't have a `.size`
+                        # attribute like PIL.Image does, but it does have `.data`
+                        # which has a shape
+                        _, *img_shape = img_tile.data.shape
 
-                if img_shape[0] != tile_N or img_shape[1] != tile_N:
-                    raise Exception(
-                        "Produced image has incorrect shape "
-                        f"({tile_N}, {tile_N}) != {img_shape}"
-                    )
-            img_tile.save(str(tile_output["image"].path))
+                    if img_shape[0] != tile_N or img_shape[1] != tile_N:
+                        raise Exception(
+                            "Produced image has incorrect shape "
+                            f"({tile_N}, {tile_N}) != {img_shape}"
+                        )
+                img_tile.save(str(tile_output["image"].path))
 
             tile_meta["scene_id"] = self.scene_id
             if self.aux_name is not None:
@@ -361,9 +365,12 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
             fn_meta = f"{tile_identifier}.yml"
             outputs[tile_identifier] = dict(
                 data=XArrayTarget(str(tile_data_path / fn_data)),
-                image=luigi.LocalTarget(str(tile_data_path / fn_image)),
                 meta=YAMLTarget(path=str(tile_data_path / fn_meta)),
             )
+            if self.create_images:
+                outputs[tile_identifier]["image"] = luigi.LocalTarget(
+                    str(tile_data_path / fn_image)
+                )
         return outputs
 
 

@@ -76,6 +76,7 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
     aux_name = luigi.OptionalParameter(default=None)
+    create_image = luigi.BoolParameter(default=True)
 
     @property
     def data_source(self):
@@ -147,12 +148,14 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
                 domain=domain, da=da_full, pad_pct=self.pad_ptc
             )
 
-        img_cropped = self._create_image(da_scene=da_cropped, da_src=da_full)
+        if "image" in self.output():
+            img_cropped = self._create_image(da_scene=da_cropped, da_src=da_full)
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
 
-        self.output()["image"].write(img_cropped)
+        if "image" in self.output():
+            self.output()["image"].write(img_cropped)
 
     @property
     def output_path(self):
@@ -177,8 +180,9 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         fn_data = f"{self.scene_id}.nc"
         outputs = dict(data=XArrayTarget(str(data_path / fn_data)))
 
-        fn_image = f"{self.scene_id}.png"
-        outputs["image"] = ImageTarget(str(data_path / fn_image))
+        if self.create_image:
+            fn_image = f"{self.scene_id}.png"
+            outputs["image"] = ImageTarget(str(data_path / fn_image))
 
         return outputs
 

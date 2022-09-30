@@ -119,7 +119,7 @@ class DBTarget(luigi.LocalTarget):
 
 class ImageTarget(luigi.LocalTarget):
     def write(self, img):
-        img.save(self.fn)
+        img.save(self.path)
 
     def read(self):
         return Image.open(self.fn)
