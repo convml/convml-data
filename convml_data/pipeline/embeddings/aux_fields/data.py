@@ -98,7 +98,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 kwargs["periodic_domain"] = False
 
             def reduction_op(da_tile):
-                value = op_fn(da_tile, **kwargs)
+                value = op_fn(da_tile.values, **kwargs)
                 long_name = f"{op_desc} on {da_tile.long_name}"
                 # I think most metrics are dimensionless
                 units = "1"
