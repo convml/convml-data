@@ -103,7 +103,7 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
                 method = "nearest_s2d"
 
             da_domain = rc.resample(domain=domain, da=da_src, dx=dx, method=method)
-            if "lat" in da_src.coords:
+            if "lat" in da_src.coords and "lat" not in da_domain.coords:
                 # XXX: this wasn't necessary previously and causes extra
                 # computation. Why aren't these variables included when
                 # interpolating?

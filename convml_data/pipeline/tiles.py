@@ -197,6 +197,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
         reqs = {}
         if self.tiles_kind == "rect-slidingwindow":
             reqs["source_data"] = SceneRegriddedData(
+                data_path=self.data_path,
                 scene_id=self.scene_id,
                 aux_name=self.aux_name,
             )

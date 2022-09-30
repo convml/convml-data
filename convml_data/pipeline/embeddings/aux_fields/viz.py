@@ -20,6 +20,8 @@ class AggPlotBaseTask(luigi.Task):
     scene_ids = luigi.OptionalParameter(default=[])
     tiles_kind = luigi.Parameter()
 
+    data_path = luigi.Parameter(default=".")
+
     embedding_model_path = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
     embedding_transform = luigi.Parameter(default=None)
@@ -37,6 +39,7 @@ class AggPlotBaseTask(luigi.Task):
 
     def requires(self):
         return AggregatedDatasetScenesAuxFieldWithEmbeddings(
+            data_path=self.data_path,
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
             embedding_model_path=self.embedding_model_path,
@@ -108,8 +111,10 @@ class AggPlotBaseTask(luigi.Task):
             )
 
         dataset_name = Path(self.datapath).absolute().stem
+        n_scenes = len(np.unique(ds.scene_id.values))
+        n_tiles = len(np.unique(ds.tile_id.values))
         title_parts = [
-            f"{int(ds.scene_id.count())} scenes",
+            f"{n_tiles} tiles across {n_scenes} scenes",
             f"{emb_name} from {dataset_name}",
         ]
         agg_parts = []
