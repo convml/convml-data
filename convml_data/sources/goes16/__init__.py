@@ -1,2 +1,3 @@
 from . import satpy_rgb  # noqa
-from .utils import parse_product_shorthand  # noqa
+from .pipeline import DERIVED_PRODUCTS
+from .utils import parse_channel_shorthand, parse_product_shorthand  # noqa

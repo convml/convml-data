@@ -9,8 +9,7 @@ from ..sources import IncompleteSourceDefition, build_query_tasks
 from ..utils.luigi import DBTarget
 from .scene_sources import (
     GenerateSceneIDs,
-    create_scenes_from_multichannel_queries,
-    get_time_for_filename,
+    create_scenes_from_input_queries,
     parse_scene_id,
 )
 
@@ -39,7 +38,7 @@ class CheckForAuxiliaryFiles(luigi.Task):
         try:
             tasks["product"] = build_query_tasks(
                 source_name=aux_source_name,
-                source_type=aux_product_name,
+                product_name=aux_product_name,
                 source_data_path=source_data_path,
                 time_intervals=self.data_source.time_intervals,
                 product_meta=self.aux_product_meta,
@@ -79,7 +78,7 @@ class CheckForAuxiliaryFiles(luigi.Task):
 
     @property
     def aux_product_name(self):
-        return self.aux_product_meta["type"]
+        return self.aux_product_meta["product"]
 
     def run(self):
         """
@@ -96,25 +95,12 @@ class CheckForAuxiliaryFiles(luigi.Task):
         # create a mapping from aux_scene_time -> aux_scene_filename(s)
         aux_source_name = self.aux_source_name
         aux_product_name = self.aux_product_name
-        if type(product_input) == dict:
-            aux_scenes_by_time = create_scenes_from_multichannel_queries(
-                inputs=product_input,
-                source_name=aux_source_name,
-                product=aux_product_name,
-                product_meta=self.aux_product_meta,
-            )
-        else:
-            aux_scenes_by_time = {}
-            for product_inputs in inputs["product"]:
-                aux_product_filenames = product_inputs.open()
-                aux_times = np.array(
-                    [
-                        get_time_for_filename(source_name=aux_source_name, filename=fn)
-                        for fn in aux_product_filenames
-                    ]
-                )
-                for (t, filename) in zip(aux_times, aux_product_filenames):
-                    aux_scenes_by_time[t] = filename
+
+        aux_scenes_by_time = create_scenes_from_input_queries(
+            inputs=product_input,
+            source_name=aux_source_name,
+            product=aux_product_name,
+        )
 
         product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
             aux_scenes_by_time=aux_scenes_by_time,
@@ -130,7 +116,7 @@ class CheckForAuxiliaryFiles(luigi.Task):
         data_source = self.data_source
         output = None
         aux_source_name = self.aux_source_name
-        if self.aux_product_name in ["data_user_function", "image_user_function"]:
+        if self.aux_product_name == "user_function":
             aux_product_name = f"{self.aux_product_name}__{self.aux_name}"
         else:
             aux_product_name = self.aux_product_name
@@ -143,7 +129,7 @@ class CheckForAuxiliaryFiles(luigi.Task):
                 / aux_product_name
             )
             output = DBTarget(
-                path=str(p), db_name=aux_product_name, db_type=data_source.db_type
+                path=str(p), db_name="matched_scene_ids", db_type=data_source.db_type
             )
 
         return output

@@ -186,7 +186,6 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
     tiles_kind = luigi.Parameter()
     aux_name = luigi.OptionalParameter(default=None)
     extra_args = luigi.DictParameter(default={})
-    create_images = luigi.BoolParameter(default=True)
 
     @property
     def data_source(self):
@@ -201,7 +200,6 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
                 data_path=self.data_path,
                 scene_id=self.scene_id,
                 aux_name=self.aux_name,
-                create_image=self.create_images,
             )
         elif self.tiles_kind in ["trajectories", "triplets"]:
             if isinstance(data_source.domain, sampling_domain.SourceDataDomain):
@@ -218,7 +216,6 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
                     tiles_kind=self.tiles_kind,
                     aux_name=self.aux_name,
                     extra_args=self.extra_args,
-                    create_image=self.create_images,
                 )
         else:
             raise NotImplementedError(self.tiles_kind)
@@ -367,7 +364,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
                 data=XArrayTarget(str(tile_data_path / fn_data)),
                 meta=YAMLTarget(path=str(tile_data_path / fn_meta)),
             )
-            if self.create_images:
+            if self.image_function is not None:
                 outputs[tile_identifier]["image"] = luigi.LocalTarget(
                     str(tile_data_path / fn_image)
                 )
@@ -493,6 +490,7 @@ class GenerateTiles(luigi.Task):
                 tiles_kind=self.tiles_kind,
                 aux_name=self.aux_name,
                 extra_args=self.extra_args,
+                data_path=self.data_path,
             )
 
         yield tasks_tiles

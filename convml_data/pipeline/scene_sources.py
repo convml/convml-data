@@ -1,19 +1,13 @@
 import datetime
 import itertools
 import logging
-from collections import OrderedDict
 from functools import partial
 from pathlib import Path
 
 import luigi
 
 from .. import DataSource
-from ..sources import (
-    build_query_tasks,
-    get_time_for_filename,
-    get_user_function_source_input_names,
-    goes16,
-)
+from ..sources import build_query_tasks, get_time_for_filename
 from ..utils.luigi import DBTarget
 
 log = logging.getLogger()
@@ -36,23 +30,26 @@ def parse_scene_id(s):
     return source, datetime.datetime.strptime(t_str, SCENE_ID_DATE_FORMAT)
 
 
-def merge_multichannel_sources(files_per_channel, time_fn):
-    channel_files_by_timestamp = {}
-    N_channels = len(files_per_channel)
-    for channel, channel_files in files_per_channel.items():
-        for ch_filename in channel_files:
-            file_timestamp = time_fn(filename=ch_filename)
-            time_group = channel_files_by_timestamp.setdefault(file_timestamp, {})
-            time_group[channel] = ch_filename
+def merge_multiinput_sources(files_per_input, time_fn):
+    input_files_by_timestamp = {}
+    N_inputs = len(files_per_input)
+    for input_name, input_files in files_per_input.items():
+        for input_filename in input_files:
+            file_timestamp = time_fn(filename=input_filename)
+            time_group = input_files_by_timestamp.setdefault(file_timestamp, {})
+            time_group[input_name] = input_filename
 
     scene_filesets = []
 
-    for timestamp in sorted(channel_files_by_timestamp.keys()):
-        timestamp_files = channel_files_by_timestamp[timestamp]
+    for timestamp in sorted(input_files_by_timestamp.keys()):
+        timestamp_files = input_files_by_timestamp[timestamp]
 
-        if len(timestamp_files) == N_channels:
+        if len(timestamp_files) == N_inputs:
             scene_filesets.append(
-                [timestamp_files[channel] for channel in files_per_channel.keys()]
+                {
+                    input_name: timestamp_files[input_name]
+                    for input_name in files_per_input.keys()
+                }
             )
         else:
             log.warn(
@@ -63,36 +60,39 @@ def merge_multichannel_sources(files_per_channel, time_fn):
     return scene_filesets
 
 
-def create_scenes_from_multichannel_queries(
-    inputs, source_name, product, product_meta={}
-):
+def create_scenes_from_input_queries(inputs, source_name, product):
+    """
+    Take a collection of "inputs" (named resources with a collection of files
+    for each, e.g. a collection of files for the channels `1`, `2` and `3` for
+    RGB composite images) and merge these together into scenes with a single
+    timestamp for each scene (returned as as a dictionary of times, with each
+    entry being a dictionary of the input-name -> filename for that scene)
+    """
     scenes_by_time = {}
-    channels_and_filenames = OrderedDict()
-    if product == "truecolor_rgb":
-        channel_order = [1, 2, 3]
-    elif product.startswith("multichannel__"):
-        channel_order = list(goes16.parse_product_shorthand(product).keys())
-    elif product == "user_function":
-        channel_order = get_user_function_source_input_names(product_meta=product_meta)
-    else:
-        raise NotImplementedError(product, source_name)
 
     opened_inputs = {}
     for input_name, input_parts in inputs.items():
+        # some queries return a list of DBTargets each containing a number of
+        # filenames matching the queries, some only return a single DBTarget,
+        # so we make into a list here to handle the general case
+        if not isinstance(input_parts, list):
+            input_parts = [input_parts]
+
         opened_inputs[input_name] = list(
             itertools.chain(*[input_part.open() for input_part in input_parts])
         )
 
-    for channel in channel_order:
-        channels_and_filenames[channel] = opened_inputs[channel]
-
     time_fn = partial(get_time_for_filename, source_name=source_name)
 
-    scene_sets = merge_multichannel_sources(channels_and_filenames, time_fn=time_fn)
+    scene_sets = merge_multiinput_sources(opened_inputs, time_fn=time_fn)
 
+    # use the first input to work out what time to use for the whole combined
+    # product for the scene
+    input_name_timing = list(inputs.keys())[0]
     for scene_filenames in scene_sets:
-        t_scene = time_fn(filename=scene_filenames[0])
+        t_scene = time_fn(filename=scene_filenames[input_name_timing])
         scenes_by_time[t_scene] = scene_filenames
+
     return scenes_by_time
 
 
@@ -115,7 +115,7 @@ class GenerateSceneIDs(luigi.Task):
 
         tasks = build_query_tasks(
             source_name=data_source.source,
-            source_type=data_source.type,
+            product_name=data_source.product,
             source_data_path=source_data_path,
             time_intervals=data_source.time_intervals,
         )
@@ -129,21 +129,11 @@ class GenerateSceneIDs(luigi.Task):
         if type(input) == dict:
             # multi-channel queries, each channel is represented by a key in the
             # dictionary
-            scenes_by_time = create_scenes_from_multichannel_queries(
+            scenes_by_time = create_scenes_from_input_queries(
                 inputs=self.input(),
                 source_name=self.data_source.source,
-                product=self.data_source.type,
+                product=self.data_source.product,
             )
-        elif type(input) == list:
-            # single-channel queries
-            scenes_by_time = {}
-            for input in self.input():
-                filename_per_scene = input.open()
-                for scene_filename in filename_per_scene:
-                    t_scene = get_time_for_filename(
-                        filename=scene_filename, source_name=data_source.source
-                    )
-                    scenes_by_time[t_scene] = scene_filename
         else:
             raise NotImplementedError(input)
 
@@ -162,7 +152,7 @@ class GenerateSceneIDs(luigi.Task):
     def output(self):
         ds = self.data_source
         name = "scene_ids"
-        path = Path(self.data_path) / "source_data" / ds.source / ds.type
+        path = Path(self.data_path) / "source_data" / ds.source / ds.product
         return DBTarget(path=str(path), db_name=name, db_type=ds.db_type)
 
 

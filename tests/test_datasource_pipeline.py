@@ -1,29 +1,44 @@
-import tempfile
+from pathlib import Path
 
 import luigi
 
-from convml_data.examples import ExampleDatasource, fetch_example_datasource
+from convml_data import DataSource
 from convml_data.pipeline import GenerateRegriddedScenes, GenerateTiles
+
+EXAMPLE_FILEPATH = str(Path(__file__).parent / "example")
+HAS_JASMIN_ACCESS = True
 
 
 def test_make_triplets():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        datasource_path = fetch_example_datasource(
-            ExampleDatasource.EUREC4A_SMALL, data_dir=tmpdir
-        )
-        task_rect_data = GenerateTiles(
-            data_path=datasource_path,
-            tiles_kind="triplets",
-        )
-        luigi.build([task_rect_data], local_scheduler=True)
+    task_rect_data = GenerateTiles(
+        data_path=EXAMPLE_FILEPATH,
+        tiles_kind="triplets",
+    )
+    assert luigi.build([task_rect_data], local_scheduler=True)
 
 
 def test_make_regridded_domain_data():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        datasource_path = fetch_example_datasource(
-            ExampleDatasource.EUREC4A_SMALL, data_dir=tmpdir
+    datasource = DataSource.load(EXAMPLE_FILEPATH)
+
+    tasks = [
+        GenerateRegriddedScenes(
+            data_path=EXAMPLE_FILEPATH,
         )
-        task_rect_data = GenerateRegriddedScenes(
-            data_path=datasource_path,
+    ]
+
+    aux_products = list(datasource.aux_products.keys())
+    for aux_product_name in aux_products:
+        if (
+            datasource.aux_products[aux_product_name]["source"] == "era5"
+            and not HAS_JASMIN_ACCESS
+        ):
+            continue
+
+        tasks.append(
+            GenerateRegriddedScenes(
+                data_path=EXAMPLE_FILEPATH,
+                aux_name=aux_product_name,
+            )
         )
-        luigi.build([task_rect_data], local_scheduler=True)
+
+    assert luigi.build(tasks, local_scheduler=True)

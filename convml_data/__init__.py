@@ -67,7 +67,7 @@ class DataSource:
         self._parse_aux_products()
 
         assert "source" in self._meta
-        assert "type" in self._meta
+        assert "product" in self._meta
         self.name = self._meta.get("name", None)
 
     def _parse_domain_meta(self):
@@ -170,7 +170,7 @@ class DataSource:
         self.aux_products = {}
         for aux_name, aux_product_meta in aux_products_meta.items():
             assert "source" in aux_product_meta
-            assert "type" in aux_product_meta
+            assert "product" in aux_product_meta
             if "dt_max" in aux_product_meta:
                 aux_product_meta["dt_max"] = np.timedelta64(
                     isodate.parse_duration(aux_product_meta["dt_max"])
@@ -199,7 +199,7 @@ class DataSource:
             meta = yaml.load(fh.read(), Loader=yaml.FullLoader)
         if meta is None:
             raise Exception(
-                "Please as minimum define the `source` and `type` of this "
+                "Please as minimum define the `source` and `product` of this "
                 "datasource in `meta.yaml`"
             )
         meta["name"] = name
@@ -215,8 +215,8 @@ class DataSource:
         return self._meta["source"]
 
     @property
-    def type(self):
-        return self._meta["type"]
+    def product(self):
+        return self._meta["product"]
 
     @property
     def files(self):

@@ -55,15 +55,22 @@ def create_true_color_img(das_channels):
     return Image.fromarray(img_data)
 
 
+def parse_channel_shorthand(channel_idenfitier):
+    if isinstance(channel_idenfitier, int) or "_" not in channel_idenfitier:
+        channel_number = int(channel_idenfitier)
+        channel_prefix = None
+    else:
+        channel_prefix, channel_number = channel_idenfitier.split("_")
+        channel_number = int(channel_number)
+    return channel_number, channel_prefix
+
+
 def parse_product_shorthand(product):
-    channel_names = product.split("__")[1:]
-    channels = dict()
-    for channel_name in channel_names:
-        if "_" not in channel_name:
-            channel_number = int(channel_name)
-            channels[channel_number] = None
-        else:
-            channel_prefix, channel_number = channel_name.split("_")
-            channel_number = int(channel_number)
-            channels[channel_number] = channel_prefix
+    channel_identifiers = product.split("__")[1:]
+    channels = {}
+    for channel_identifier in channel_identifiers:
+        channel_number, channel_prefix = parse_channel_shorthand(
+            channel_idenfitier=channel_identifier
+        )
+        channels[channel_number] = channel_prefix
     return channels

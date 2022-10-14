@@ -94,7 +94,7 @@ def load_rgb_files_and_get_composite_da(scene_fns, bbox_crop=None):
     return da_truecolor
 
 
-def load_aux_file(scene_fn):
+def load_aux_file(scene_fn, bbox_crop=None):
     # aux fields we simply open so we can crop them
     # but we need to pick out the right variable in the dataset
     ds = xr.open_dataset(scene_fn)
@@ -111,6 +111,15 @@ def load_aux_file(scene_fn):
 
     scene = satpy.Scene(reader="abi_l2_nc", filenames=[scene_fn])
     scene.load([var_name])
+
+    # use satpy's cropping for latlon-bbox crop
+    if bbox_crop is not None:
+        if len(bbox_crop) != 4:
+            raise Exception(bbox_crop)
+        # satpy bbox: [WSEN]
+        scene = scene.crop(
+            ll_bbox=[bbox_crop[0], bbox_crop[2], bbox_crop[1], bbox_crop[3]]
+        )
 
     da = scene[var_name]
     if "crs" in da.coords:

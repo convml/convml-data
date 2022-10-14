@@ -7,7 +7,6 @@ import xarray as xr
 from PIL import Image
 
 from ..sources import goes16
-from .user_functions import get_user_function
 
 
 def make_rgb(da, alpha=0.5, invert_values=False, **coord_components):
@@ -64,7 +63,7 @@ def make_rgb(da, alpha=0.5, invert_values=False, **coord_components):
 
 
 def _generic_rgb_from_scene(da_scene):
-    if len(da_scene.squeeze().data.shape) == 2:
+    if len(da_scene.data.shape) == 2:
         da_rgba = make_rgb(
             da=da_scene.squeeze().expand_dims("foo"), alpha=1.0, foo=[0, 0, 0]
         )
@@ -75,7 +74,15 @@ def _generic_rgb_from_scene(da_scene):
         dims.append("rgb")
         img_data = da_rgb.transpose(*dims).data[::-1, :, :]
     else:
+        dim0 = da_scene.dims[0]
+        if len(da_scene[dim0]) > 3:
+            raise Exception(
+                f"The first dimension of the scene's DataArray ({dim0}) is larger "
+                f"than 3 (< {len(da_scene[dim0])}), so it isn't clear how to create "
+                "an image for the scene"
+            )
         img_data = da_scene.data
+
     v_min, v_max = np.nanmin(img_data), np.nanmax(img_data)
     img_data = 1.0 - (img_data - v_min) / (v_max - v_min)
     img_data = (img_data * 255).astype(np.uint8)
@@ -83,8 +90,7 @@ def _generic_rgb_from_scene(da_scene):
     return img_domain
 
 
-def _rgb_image_from_user_function_scene_data(product, da_scene, **kwargs):
-    image_function = get_user_function(**kwargs)
+def _rgb_image_from_user_function_scene_data(product, da_scene, image_function):
     da_rgb = image_function(da_scene=da_scene)
 
     if da_rgb.min() < 0.0:
@@ -115,41 +121,19 @@ def _rgb_image_from_user_function_scene_data(product, da_scene, **kwargs):
     return img_domain
 
 
-def rgb_image_from_scene_data(source_name, product, da_scene, **kwargs):
-    if product == "image_user_function":
-        img_domain = _rgb_image_from_user_function_scene_data(
-            product=product, da_scene=da_scene, **kwargs
-        )
-    elif source_name == "goes16":
+def rgb_image_from_scene_data(source_name, product, da_scene, image_function):
+    if image_function == "default" and source_name == "goes16":
         if product == "truecolor_rgb" and "bands" in da_scene.coords:
             da_scene.attrs.update(dict(standard_name="true_color"))
             img_domain = goes16.satpy_rgb.rgb_da_to_img(da=da_scene)
-        elif product.startswith("multichannel__") or product.startswith(
-            "singlechannel__"
-        ):
-            if product.startswith("multichannel__"):
-                channels = list(goes16.parse_product_shorthand(product).keys())
-                # TODO: for now we will invert the Radiance channel values when
-                # creating RGB images from them
-                da_rgba = make_rgb(
-                    da_scene, channel=channels, invert_values=True, alpha=1.0
-                )
-            elif product.startswith("singlechannel__"):
-                raise NotImplementedError(product)
-            else:
-                raise NotImplementedError(product)
-
-            # PIL assumes image shape (h, w, channels), indexes from
-            # bottom-left of image, no need for alpha values and requires
-            # unsigned 8bit ints
-            rgb_values = (
-                (255.0 * da_rgba.transpose("y", "x", "rgba"))
-                .astype(np.uint8)
-                .values[::-1, :, :3]
-            )
-            img_domain = Image.fromarray(rgb_values)
+        elif product in goes16.DERIVED_PRODUCTS:
+            img_domain = _generic_rgb_from_scene(da_scene=da_scene)
         else:
             raise NotImplementedError(product)
+    elif callable(image_function):
+        img_domain = _rgb_image_from_user_function_scene_data(
+            product=product, da_scene=da_scene, image_function=image_function
+        )
     else:
         img_domain = _generic_rgb_from_scene(da_scene=da_scene)
 

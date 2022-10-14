@@ -39,8 +39,6 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
     Regrid the scene source data to a fixed Cartesian resolution
     """
 
-    create_image = luigi.BoolParameter(default=True)
-
     @property
     def data_source(self):
         return DataSource.load(path=self.data_path)
@@ -104,21 +102,9 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
             else:
                 method = "nearest_s2d"
 
-            da_domain = rc.resample(domain=domain, da=da_src, dx=dx, method=method)
-            if "lat" in da_src.coords and "lat" not in da_domain.coords:
-                # XXX: this wasn't necessary previously and causes extra
-                # computation. Why aren't these variables included when
-                # interpolating?
-                da_domain["lat"] = rc.resample(
-                    domain=domain, da=da_src.lat, dx=dx, method=method
-                )
-                da_domain["lon"] = rc.resample(
-                    domain=domain, da=da_src.lon, dx=dx, method=method
-                )
-
-            # copy over attrs so we keep the long_name and units
-            # if they exists on the source
-            da_domain.attrs.update(da_src.attrs)
+            da_domain = rc.resample(
+                domain=domain, da=da_src, dx=dx, method=method, keep_attrs=True
+            )
 
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
@@ -126,7 +112,7 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
             da_domain = domain_output["data"].open()
 
         if "image" in self.output():
-            img_domain = self._create_image(da_scene=da_domain, da_src=da_src)
+            img_domain = self._create_image(da_scene=da_domain)
             img_domain.save(str(domain_output["image"].fn))
 
     def output(self):
@@ -140,7 +126,7 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
             data=XArrayTarget(str(scene_data_path / fn_data)),
         )
 
-        if self.create_image:
+        if self.image_function is not None:
             fn_image = f"{self.scene_id}.png"
             outputs["image"] = ImageTarget(str(scene_data_path / fn_image))
         return outputs
