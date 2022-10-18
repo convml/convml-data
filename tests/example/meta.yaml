@@ -19,6 +19,10 @@ aux_products:
     source: era5
     product: user_function
     input: [q, t, z, lnsp]
+  relative_humidity:
+    source: era5
+    product: rh
+    image_function: null
   cloud_mask_ch13bt:
     source: goes16
     product: user_function

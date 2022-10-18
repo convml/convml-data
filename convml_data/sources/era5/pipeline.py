@@ -6,6 +6,7 @@ import luigi.contrib.ssh
 import parse
 
 from ...utils.luigi import DBTarget, NumpyDatetimeParameter, XArrayTarget
+from .base import SOURCE_VARIABLES
 
 SURFACE_VARIABLES = ["sst"]
 JASMIN_ROOT_PATH = Path("/badc/ecmwf-era5/data/oper")
@@ -71,6 +72,10 @@ class ERA5Query(luigi.Task):
     DB_NAME_FORMAT = "{data_type}_keys_{t_start:%Y%m%d%H%M}_{t_end:%Y%m%d%H%M}"
 
     def run(self):
+        if self.data_type not in SOURCE_VARIABLES:
+            raise Exception(
+                f"{self.data_type} is not one of the available source variables"
+            )
         filenames = list(
             get_available_files(
                 t_start=self.t_start, t_end=self.t_end, product=self.data_type

@@ -6,15 +6,15 @@ from pathlib import Path
 import luigi
 
 from .. import DataSource
-from ..sources import build_fetch_tasks, extract_variable
+from ..sources import build_fetch_tasks, extract_variable, get_required_extra_fields
 from ..utils.luigi import ImageTarget, XArrayTarget
-from .aux_sources import CheckForAuxiliaryFiles
+from .aux_sources import AuxTaskMixin, CheckForAuxiliaryFiles
 from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
 
 
-class SceneSourceFiles(luigi.Task):
+class SceneSourceFiles(luigi.Task, AuxTaskMixin):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     aux_name = luigi.OptionalParameter(default=None)
@@ -28,18 +28,12 @@ class SceneSourceFiles(luigi.Task):
             return CheckForAuxiliaryFiles(
                 data_path=self.data_path, aux_name=self.aux_name
             )
-        else:
-            return GenerateSceneIDs(data_path=self.data_path)
+
+        return GenerateSceneIDs(data_path=self.data_path)
 
     def _build_fetch_tasks(self):
         task = None
-        ds = self.data_source
-
-        if self.aux_name is None:
-            source_name = ds.source
-        else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-        source_data_path = Path(self.data_path) / "source_data" / source_name
+        source_data_path = Path(self.data_path) / "source_data" / self.source_name
 
         if self.input().exists():
             all_source_files = self.input().open()
@@ -51,7 +45,7 @@ class SceneSourceFiles(luigi.Task):
             scene_source_files = all_source_files[self.scene_id]
             task = build_fetch_tasks(
                 scene_source_files=scene_source_files,
-                source_name=source_name,
+                source_name=self.source_name,
                 source_data_path=source_data_path,
             )
 
@@ -73,17 +67,29 @@ class SceneSourceFiles(luigi.Task):
             return luigi.LocalTarget(f"__fake_target__{self.scene_id}__")
 
 
-class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
+class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     pad_ptc = luigi.FloatParameter(default=0.1)
     aux_name = luigi.OptionalParameter(default=None)
 
-    @property
-    def data_source(self):
-        return DataSource.load(path=self.data_path)
-
     def requires(self):
+        required_extra_fields = get_required_extra_fields(
+            data_source=self.source_name, product=self.product_name
+        )
+
+        if required_extra_fields is not None:
+            # create a child tasks which create cropped versions of required
+            # extra fields to create the requested product
+            tasks = {}
+            for var_name in required_extra_fields:
+                tasks[var_name] = CropSceneSourceFiles(
+                    scene_id=self.scene_id,
+                    data_path=self.data_path,
+                    aux_name=f"__extra__{self.source_name}__{var_name}",
+                )
+            return tasks
+
         return dict(
             data=SceneSourceFiles(
                 data_path=self.data_path,
@@ -97,41 +103,22 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         return self.data_source.domain
 
     def run(self):
-        data_source = self.data_source
-
-        if self.aux_name is None:
-            source_name = data_source.source
-            product_name = data_source.product
-            product_identifier = self.data_source.name
-            product_meta = dict(name=product_identifier)
-            if product_name == "user_function":
-                if "input" not in self.data_source._meta:
-                    raise Exception(
-                        "To use a user-function on the primary data-set being"
-                        " produced you need to define the channels used by defining"
-                        " the section `input` in the input `meta.yaml` file"
-                    )
-                else:
-                    product_meta["input"] = self.data_source._meta["input"]
-        else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product_name = self.data_source.aux_products[self.aux_name]["product"]
-            product_identifier = self.aux_name
-            product_meta = self.data_source.aux_products[self.aux_name]
-
-        product_meta["context"] = dict(
-            datasource_path=self.data_path,
-            product_identifier=product_identifier,
-        )
-
         domain = self.domain
 
+        required_extra_fields = get_required_extra_fields(
+            data_source=self.source_name, product=self.product_name
+        )
+        if required_extra_fields is not None:
+            task_input = {v: inp["data"] for (v, inp) in self.input().items()}
+        else:
+            task_input = self.input()["data"]
+
         da_cropped = extract_variable(
-            task_input=self.input()["data"],
-            data_source=source_name,
-            product=product_name,
+            task_input=task_input,
+            data_source=self.source_name,
+            product=self.product_name,
             domain=domain,
-            product_meta=product_meta,
+            product_meta=self.product_meta,
         )
 
         if "image" in self.output():
@@ -152,8 +139,8 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         if self.aux_name is None:
             output_path = output_path / ds.source / ds.product
         else:
-            product_name = self.data_source.aux_products[self.aux_name]["product"]
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
+            product_name = self.product_name
+            source_name = self.source_name
             if product_name == "user_function":
                 product_name = f"{product_name}__{self.aux_name}"
             output_path = output_path / source_name / product_name

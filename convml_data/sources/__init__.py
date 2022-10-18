@@ -308,6 +308,13 @@ def _load_and_crop_input_variable(task, var_name, data_source, domain):
     return da
 
 
+def get_required_extra_fields(data_source, product):
+    if data_source == "era5" and product in era5.DERIVED_VARIABLES:
+        return era5.DERIVED_VARIABLES[product][1]
+
+    return None
+
+
 def extract_variable(task_input, data_source, product, product_meta={}, domain=None):
     do_crop = domain is not None
 
@@ -344,9 +351,17 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
     elif data_source == "era5":
         if product in era5.SOURCE_VARIABLES:
             da = task_input[product].open()
+            da = da.rename(dict(longitude="lon", latitude="lat"))
+        elif product in era5.DERIVED_VARIABLES:
+            calc_fn, _ = era5.DERIVED_VARIABLES[product]
+            kwargs = {}
+            for (var_name, inp) in task_input.items():
+                dsda = inp.open()
+                kind = isinstance(dsda, xr.DataArray) and "da" or "ds"
+                kwargs[f"{kind}_{var_name}"] = dsda
+            da = calc_fn(**kwargs)
         else:
             raise NotImplementedError(product)
-        da = da.rename(dict(longitude="lon", latitude="lat"))
     else:
         raise NotImplementedError(data_source)
 

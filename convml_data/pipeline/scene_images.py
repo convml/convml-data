@@ -6,23 +6,17 @@ class SceneImageMixin(object):  # noqa
     @property
     def image_function(self):
         if self.aux_name is not None:
-            image_function = self.data_source.aux_products[self.aux_name].get(
-                "image_function", "default"
-            )
+            if "__extra__" in self.aux_name:
+                image_function = None
+            else:
+                image_function = self.data_source.aux_products[self.aux_name].get(
+                    "image_function", "default"
+                )
         else:
             image_function = self.data_source._meta.get("image_function", "default")
         return image_function
 
     def _create_image(self, da_scene):
-        data_source = self.data_source
-
-        if self.aux_name is None:
-            source_name = data_source.source
-            product_name = data_source.product
-        else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product_name = self.data_source.aux_products[self.aux_name]["product"]
-
         image_function = self.image_function
 
         if image_function is None:
@@ -37,8 +31,8 @@ class SceneImageMixin(object):  # noqa
 
         img_domain = create_source_image(
             da_scene=da_scene.squeeze(),
-            source_name=source_name,
-            product=product_name,
+            source_name=self.source_name,
+            product=self.product_name,
             image_function=image_function,
         )
 

@@ -14,7 +14,74 @@ from .scene_sources import (
 )
 
 
-class CheckForAuxiliaryFiles(luigi.Task):
+class AuxTaskMixin(object):
+    @property
+    def data_source(self):
+        return DataSource.load(path=self.data_path)
+
+    @property
+    def source_name(self):
+        if self.aux_name is None:
+            source_name = self.data_source.source
+        elif self.aux_name.startswith("__extra__"):
+            *_, source_name, _ = self.aux_name.split("__")
+        else:
+            source_name = self.data_source.aux_products[self.aux_name]["source"]
+        return source_name
+
+    @property
+    def product_name(self):
+        if self.aux_name is None:
+            product_name = self.data_source.product
+        elif self.aux_name.startswith("__extra__"):
+            *_, product_name = self.aux_name.split("__")
+        else:
+            product_name = self.data_source.aux_products[self.aux_name]["product"]
+        return product_name
+
+    @property
+    def product_identifier(self):
+        if self.aux_name is None:
+            product_identifier = self.data_source.name
+        else:
+            product_identifier = self.aux_name
+        return product_identifier
+
+    @property
+    def product_meta(self):
+        if self.aux_name is None:
+            product_meta = dict(name=self.product_identifier)
+            if self.product_name == "user_function":
+                if "input" not in self.data_source._meta:
+                    raise Exception(
+                        "To use a user-function on the primary data-set being"
+                        " produced you need to define the channels used by defining"
+                        " the section `input` in the input `meta.yaml` file"
+                    )
+                else:
+                    product_meta["input"] = self.data_source._meta["input"]
+        elif "__extra__" in self.aux_name:
+            product_meta = {}
+        else:
+            product_meta = self.data_source.aux_products.get(self.aux_name)
+            if product_meta is None:
+                raise Exception(
+                    f"Please define `{self.aux_name}` in the `aux_products`"
+                    " group in meta.yaml"
+                )
+
+        product_meta["context"] = dict(
+            datasource_path=self.data_path,
+            product_identifier=self.product_identifier,
+        )
+
+        if "scene_mapping_strategy" not in product_meta:
+            product_meta["scene_mapping_strategy"] = "single_scene_per_aux_time"
+
+        return product_meta
+
+
+class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
     """
     Convenience task for downloading extra data for each scene and matching the
     available data to the scenes of the primary datasource
@@ -31,17 +98,17 @@ class CheckForAuxiliaryFiles(luigi.Task):
         tasks = {}
         tasks["scene_ids"] = GenerateSceneIDs(data_path=self.data_path)
 
-        aux_source_name = self.aux_source_name
-        aux_product_name = self.aux_product_name
-        source_data_path = Path(self.data_path) / "source_data" / aux_source_name
+        source_name = self.source_name
+        product_name = self.product_name
+        source_data_path = Path(self.data_path) / "source_data" / source_name
 
         try:
             tasks["product"] = build_query_tasks(
-                source_name=aux_source_name,
-                product_name=aux_product_name,
+                source_name=source_name,
+                product_name=product_name,
                 source_data_path=source_data_path,
                 time_intervals=self.data_source.time_intervals,
-                product_meta=self.aux_product_meta,
+                product_meta=self.product_meta,
             )
         except IncompleteSourceDefition as ex:
             raise Exception(
@@ -52,33 +119,11 @@ class CheckForAuxiliaryFiles(luigi.Task):
         return tasks
 
     @property
-    def aux_product_meta(self):
-        product_meta = self.data_source.aux_products.get(self.aux_name)
-        if product_meta is None:
-            raise Exception(
-                f"Please define `{self.aux_name}` in the `aux_products`"
-                " group in meta.yaml"
-            )
-
-        if "scene_mapping_strategy" not in product_meta:
-            product_meta["scene_mapping_strategy"] = "single_scene_per_aux_time"
-
-        return product_meta
-
-    @property
     def dt_aux(self):
-        dt_aux = self.aux_product_meta.get("dt_aux", None)
+        dt_aux = self.product_meta.get("dt_aux", None)
         if dt_aux is not None:
             dt_aux = isodate.parse_duration(dt_aux)
         return dt_aux
-
-    @property
-    def aux_source_name(self):
-        return self.aux_product_meta["source"]
-
-    @property
-    def aux_product_name(self):
-        return self.aux_product_meta["product"]
 
     def run(self):
         """
@@ -93,13 +138,10 @@ class CheckForAuxiliaryFiles(luigi.Task):
         product_input = inputs["product"]
 
         # create a mapping from aux_scene_time -> aux_scene_filename(s)
-        aux_source_name = self.aux_source_name
-        aux_product_name = self.aux_product_name
-
         aux_scenes_by_time = create_scenes_from_input_queries(
             inputs=product_input,
-            source_name=aux_source_name,
-            product=aux_product_name,
+            source_name=self.source_name,
+            product=self.product_name,
         )
 
         product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
@@ -107,7 +149,7 @@ class CheckForAuxiliaryFiles(luigi.Task):
             scene_times=scene_times,
             scene_ids=scene_ids,
             dt_aux=self.dt_aux,
-            strategy=self.aux_product_meta["scene_mapping_strategy"],
+            strategy=self.product_meta["scene_mapping_strategy"],
         )
 
         self.output().write(product_fn_for_scenes)
@@ -115,19 +157,13 @@ class CheckForAuxiliaryFiles(luigi.Task):
     def output(self):
         data_source = self.data_source
         output = None
-        aux_source_name = self.aux_source_name
-        if self.aux_product_name == "user_function":
-            aux_product_name = f"{self.aux_product_name}__{self.aux_name}"
+        if self.product_name == "user_function":
+            product_name = f"{self.product_name}__{self.aux_name}"
         else:
-            aux_product_name = self.aux_product_name
+            product_name = self.product_name
 
         if data_source.source == "goes16":
-            p = (
-                Path(self.data_path)
-                / "source_data"
-                / aux_source_name
-                / aux_product_name
-            )
+            p = Path(self.data_path) / "source_data" / self.source_name / product_name
             output = DBTarget(
                 path=str(p), db_name="matched_scene_ids", db_type=data_source.db_type
             )
