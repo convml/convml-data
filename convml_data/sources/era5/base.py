@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+from eurec4a_environment.variables import atmos as atmos_variables
 from metpy import calc as mpcalc
 
 from .scalars import calc_eis, calc_lcl, calc_lts
@@ -44,23 +45,41 @@ def _calc_alt_p(da_t, da_q, da_z, da_lnsp):
     return ds
 
 
-def _calc_rh(da_t, da_q, ds_alt_p):
-    da_p = ds_alt_p.p
+def _calc_rh(da_t, da_q, da_p):
     da_rh = mpcalc.relative_humidity_from_specific_humidity(
         pressure=da_p, temperature=da_t, specific_humidity=da_q
     )
     assert isinstance(da_rh, xr.DataArray)
     da_rh.attrs["long_name"] = "relative humidity"
     da_rh.attrs["standard_name"] = "relative_humidity"
+    assert da_rh.metpy.units == "1"
+    da_rh.attrs["units"] = "1"
     da_rh.name = "rh"
     return da_rh
 
 
+def _calc_potential_temperature(da_p, da_t):
+    ds = xr.merge([da_p, da_t])
+    da_theta = atmos_variables.potential_temperature(ds=ds, vertical_coord="level")
+    return da_theta
+
+
+def _calc_alt(ds_alt_p):
+    return ds_alt_p.alt
+
+
+def _calc_pressure(ds_alt_p):
+    return ds_alt_p.p
+
+
 DERIVED_VARIABLES = dict(
-    d_theta__lts=(calc_lts, ["alt", "p", "theta"]),
-    d_theta__eis=(calc_eis, ["alt", "p", "theta", "d_theta__lts", "t", "z_lcl"]),
     umag=(_calc_umag, ["u", "v"]),
-    rh=(_calc_rh, ["t", "q", "alt_p"]),
-    z_lcl=(calc_lcl, ["alt", "t", "rh"]),
     alt_p=(_calc_alt_p, ["q", "t", "z", "lnsp"]),
+    alt=(_calc_alt, ["alt_p"]),
+    p=(_calc_pressure, ["alt_p"]),
+    rh=(_calc_rh, ["t", "q", "p"]),
+    z_lcl=(calc_lcl, ["alt", "t", "rh"]),
+    theta=(_calc_potential_temperature, ["p", "t"]),
+    d_theta__lts=(calc_lts, ["alt_p", "theta"]),
+    d_theta__eis=(calc_eis, ["alt_p", "theta", "d_theta__lts", "t", "z_lcl"]),
 )

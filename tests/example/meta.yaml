@@ -15,14 +15,20 @@ aux_products:
     source: era5
     product: u
     image_function: null
-  inversion_strength:
+  estimated_inversion_strength:
     source: era5
-    product: user_function
-    input: [q, t, z, lnsp]
+    product: d_theta__eis
+  lower_tropospheric_stability:
+    source: era5
+    product: d_theta__lts
   relative_humidity:
     source: era5
     product: rh
     image_function: null
+  #bl_relative_humidity:
+    #source: era5
+    #product: user_function
+    #input: [rh]
   cloud_mask_ch13bt:
     source: goes16
     product: user_function
@@ -31,6 +37,17 @@ aux_products:
   cloud_top_height_goes16:
     source: goes16
     product: ACHA
+  lifting_condensation_level:
+    source: era5
+    product: z_lcl
+  total_water_vapour:
+    source: era5
+    product: q
+    image_function: null
+  absolute_temperature:
+    source: era5
+    product: t
+    image_function: null
 
 time:
   N_days: 1

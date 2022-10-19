@@ -8,7 +8,7 @@ from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..utils.domain_images import align_axis_x
 from ..utils.luigi import ImageTarget, XArrayTarget
-from .aux_sources import CheckForAuxiliaryFiles
+from .aux_sources import AuxTaskMixin, CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
 from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
@@ -34,7 +34,7 @@ def _plot_scene_aux(da_aux, img, **kwargs):
     return fig, axes
 
 
-class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
+class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
     """
     Regrid the scene source data to a fixed Cartesian resolution
     """

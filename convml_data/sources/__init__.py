@@ -97,7 +97,13 @@ def build_query_tasks(
                     product_meta=product_meta
                 )
             elif product_name in era5.DERIVED_VARIABLES:
-                _, required_inputs = era5.DERIVED_VARIABLES[product_name]
+                required_inputs = _find_source_variables_set(
+                    target_variable=product_name,
+                    source_variables=era5.SOURCE_VARIABLES,
+                    derived_variables={
+                        v: prod[1] for (v, prod) in era5.DERIVED_VARIABLES.items()
+                    },
+                )
             else:
                 available_era5_products = list(era5.SOURCE_VARIABLES) + list(
                     era5.DERIVED_VARIABLES.keys()
@@ -122,6 +128,30 @@ def build_query_tasks(
         raise NotImplementedError(source_name)
 
     return tasks
+
+
+def _find_source_variables_set(target_variable, source_variables, derived_variables):
+    required_inputs = [target_variable]
+    # keep iterating until we've found a set of source variables to start from
+    max_resolution_depth = 10
+    n_resolution_steps = 0
+    while any(var_name in derived_variables for var_name in required_inputs):
+        n_resolution_steps += 1
+        if n_resolution_steps > max_resolution_depth:
+            raise Exception(required_inputs)
+
+        for var_name in required_inputs:
+            if var_name in derived_variables:
+                replacement_vars = derived_variables[var_name]
+                required_inputs.remove(var_name)
+                required_inputs = list(set(required_inputs).union(replacement_vars))
+
+    while any(var_name in derived_variables for var_name in required_inputs):
+        raise Exception(required_inputs)
+    if len(required_inputs) == 0:
+        raise Exception(target_variable)
+
+    return required_inputs
 
 
 def build_fetch_tasks(scene_source_files, source_name, source_data_path):
@@ -359,7 +389,8 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
                 dsda = inp.open()
                 kind = isinstance(dsda, xr.DataArray) and "da" or "ds"
                 kwargs[f"{kind}_{var_name}"] = dsda
-            da = calc_fn(**kwargs)
+            # coord order needs to be correct for plotting
+            da = calc_fn(**kwargs).transpose(..., "lat", "lon")
         else:
             raise NotImplementedError(product)
     else:

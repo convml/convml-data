@@ -13,6 +13,10 @@ from .scene_sources import (
     parse_scene_id,
 )
 
+# need to use three underscores because some product names might have two underscores in them
+EXTRA_PRODUCT_SEPERATOR = "___"
+EXTRA_PRODUCT_SENTINEL = f"{EXTRA_PRODUCT_SEPERATOR}extra{EXTRA_PRODUCT_SEPERATOR}"
+
 
 class AuxTaskMixin(object):
     @property
@@ -23,8 +27,8 @@ class AuxTaskMixin(object):
     def source_name(self):
         if self.aux_name is None:
             source_name = self.data_source.source
-        elif self.aux_name.startswith("__extra__"):
-            *_, source_name, _ = self.aux_name.split("__")
+        elif self.aux_name.startswith(EXTRA_PRODUCT_SENTINEL):
+            *_, source_name, _ = self.aux_name.split(EXTRA_PRODUCT_SEPERATOR)
         else:
             source_name = self.data_source.aux_products[self.aux_name]["source"]
         return source_name
@@ -33,8 +37,8 @@ class AuxTaskMixin(object):
     def product_name(self):
         if self.aux_name is None:
             product_name = self.data_source.product
-        elif self.aux_name.startswith("__extra__"):
-            *_, product_name = self.aux_name.split("__")
+        elif self.aux_name.startswith(EXTRA_PRODUCT_SEPERATOR):
+            *_, product_name = self.aux_name.split(EXTRA_PRODUCT_SEPERATOR)
         else:
             product_name = self.data_source.aux_products[self.aux_name]["product"]
         return product_name
@@ -60,7 +64,7 @@ class AuxTaskMixin(object):
                     )
                 else:
                     product_meta["input"] = self.data_source._meta["input"]
-        elif "__extra__" in self.aux_name:
+        elif EXTRA_PRODUCT_SEPERATOR in self.aux_name:
             product_meta = {}
         else:
             product_meta = self.data_source.aux_products.get(self.aux_name)
@@ -138,11 +142,14 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
         product_input = inputs["product"]
 
         # create a mapping from aux_scene_time -> aux_scene_filename(s)
-        aux_scenes_by_time = create_scenes_from_input_queries(
-            inputs=product_input,
-            source_name=self.source_name,
-            product=self.product_name,
-        )
+        import ipdb
+
+        with ipdb.launch_ipdb_on_exception():
+            aux_scenes_by_time = create_scenes_from_input_queries(
+                inputs=product_input,
+                source_name=self.source_name,
+                product=self.product_name,
+            )
 
         product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
             aux_scenes_by_time=aux_scenes_by_time,

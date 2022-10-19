@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.signal
 import xarray as xr
 from eurec4a_environment import get_fields
 from eurec4a_environment import nomenclature as nom
@@ -6,22 +7,20 @@ from eurec4a_environment.constants import cp_d, g
 from eurec4a_environment.variables import atmos as atmos_variables
 from eurec4a_environment.variables import tropical as tropical_variables
 from eurec4a_environment.variables.utils import apply_by_column
-from lagtraj.domain.sources.era5.utils import calculate_heights_and_pressures
 
 levels_bl = dict(level=slice(120, None))
 levels_cl = dict(level=slice(101, 120))
 
 
-def calc_lts(da_alt, da_p, da_theta):
-    ds = xr.merge([da_alt, da_p, da_theta])
-
+def calc_lts(ds_alt_p, da_theta):
+    ds = xr.merge([ds_alt_p, da_theta]).squeeze()
     return tropical_variables.lower_tropospheric_stability(
         ds=ds, vertical_coord="level"
     )
 
 
-def calc_eis(da_alt, da_p, da_theta, da_d_theta__lts, da_t, da_z_lcl):
-    ds = xr.merge([da_alt, da_p, da_theta, da_d_theta__lts, da_t, da_z_lcl])
+def calc_eis(ds_alt_p, da_theta, da_d_theta__lts, da_t, da_z_lcl):
+    ds = xr.merge([ds_alt_p, da_theta, da_d_theta__lts, da_t, da_z_lcl])
 
     da_eis = tropical_variables.estimated_inversion_strength(
         ds=ds, vertical_coord="level", LTS=da_d_theta__lts.name, LCL=da_z_lcl.name
@@ -35,7 +34,7 @@ def find_LCL_Bolton(
     rh=nom.RELATIVE_HUMIDITY,
     altitude=nom.ALTITUDE,
     vertical_coord=nom.ALTITUDE,
-    layer_method="altitude_below_dtemp_min_height",
+    layer_method="first_delta_temp_minimum",
     debug=False,
     layer_sampling_method="half_minmax",
 ):
@@ -66,34 +65,46 @@ def find_LCL_Bolton(
         da_tlcl = (
             1.0 / ((1.0 / (da_temperature - 55.0)) - (np.log(da_rh) / 2840.0)) + 55.0
         )
-        da_zlcl = da_altitude - (cp_d * (da_tlcl - da_temperature) / g)
+        da_delta_temp = da_tlcl - da_temperature
+        da_zlcl = da_altitude - (cp_d * da_delta_temp / g)
 
-        if layer_method == "altitude_below_dtemp_min_height":
+        if layer_method == "first_delta_temp_minimum":
+            # find the altitude at which the there is a local minimum in the difference
+            # between the temperature and LCL temperature
             da_dtemp = da_temperature - da_tlcl
-            z_dtemp_min = ds_column.isel({vertical_coord: da_dtemp.argmin().compute()})[
-                altitude
-            ]
-            if debug:
-                # da_dtemp["alt"] = ds_column[altitude]
-                # da_dtemp.swap_dims(level="alt").sel(alt=slice(0, 4000)).plot(y="alt")
-                # da_zlcl["alt"] = ds_column[altitude]
-                # da_ = da_zlcl.where(da_altitude < z_dtemp_min, drop=True).compute().swap_dims(level="alt")
-                # da_.plot(marker='.', y="alt", yincrease=True)
-                pass
+            alt_peaks = da_altitude.isel(
+                {vertical_coord: scipy.signal.find_peaks(da_delta_temp)[0]}
+            )
+            alt_min_alt_peak = alt_peaks.min()
+            # must be less-than-or-equal to include case where there is no
+            # mixed-layer and surface state is the one that condenses at the
+            # smallest height difference
+            da_zlcl_layer = da_zlcl.where(da_altitude <= alt_min_alt_peak, drop=True)
+        elif layer_method == "altitude_below_dtemp_min_height":
+            # NOTE: this method can sometimes produce a very deep layer since there
+            # is sometimes a minimum at high altitude
+            da_dtemp = da_temperature - da_tlcl
+            vert_idx = da_dtemp.argmin().compute()
+            z_dtemp_min = ds_column.isel({vertical_coord: vert_idx})[altitude]
             # must be less-than-or-equal to include case where there is no
             # mixed-layer and surface state is the one that condenses at the
             # smallest height difference
             da_zlcl_layer = da_zlcl.where(da_altitude <= z_dtemp_min, drop=True)
-
-        else:
+        elif layer_method is None:
             da_zlcl_layer = da_zlcl
+        else:
+            raise NotImplementedError(layer_method)
 
         if layer_sampling_method == "mean":
             da_zlcl_column = np.mean(da_zlcl_layer)
+        elif layer_sampling_method == "median":
+            da_zlcl_column = np.median(da_zlcl_layer)
         elif layer_sampling_method == "half_minmax":
             da_zlcl_column = 0.5 * (da_zlcl_layer.min() + da_zlcl_layer.max())
         else:
             raise NotImplementedError(layer_sampling_method)
+
+        da_zlcl_column.attrs["layer_std"] = da_zlcl_layer.std().item()
         return da_zlcl_column
 
     ds_selected = get_fields(ds, **{temperature: "K", rh: "1", altitude: "m"})
@@ -118,18 +129,8 @@ def calc_lcl(da_alt, da_t, da_rh):
     return da_lcl
 
 
-def _calc_eis(da_q, da_t, da_z, da_lnsp):
+def _calc_eis(da_q, da_t, da_z, da_lnsp, da_z_lcl):
     ds = xr.merge([da_q, da_t, da_z, da_lnsp])
-
-    ds["sp"] = np.exp(ds.lnsp)
-
-    def add_height_and_pressure(ds):
-        ds_aux = calculate_heights_and_pressures(ds=ds)
-        ds["alt"] = ds_aux["height_f"]
-        ds["p"] = ds_aux["p_f"]
-        return ds
-
-    add_height_and_pressure(ds)
 
     ds[nom.POTENTIAL_TEMPERATURE] = atmos_variables.potential_temperature(
         ds=ds, vertical_coord="level"
@@ -139,9 +140,7 @@ def _calc_eis(da_q, da_t, da_z, da_lnsp):
         ds=ds, vertical_coord="level"
     )
     ds["dtheta_LTS"] = da_lts
-
-    ds["z_LCL"] = 700.0 * xr.ones_like(ds.t.isel(level=0), dtype=float)
-    ds["z_LCL"].attrs["units"] = "m"
+    ds["z_LCL"] = da_z_lcl
 
     da_eis = tropical_variables.estimated_inversion_strength(
         ds=ds, vertical_coord="level"

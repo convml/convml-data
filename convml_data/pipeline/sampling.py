@@ -8,7 +8,12 @@ import luigi
 from .. import DataSource
 from ..sources import build_fetch_tasks, extract_variable, get_required_extra_fields
 from ..utils.luigi import ImageTarget, XArrayTarget
-from .aux_sources import AuxTaskMixin, CheckForAuxiliaryFiles
+from .aux_sources import (
+    EXTRA_PRODUCT_SENTINEL,
+    EXTRA_PRODUCT_SEPERATOR,
+    AuxTaskMixin,
+    CheckForAuxiliaryFiles,
+)
 from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
@@ -86,7 +91,7 @@ class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
                 tasks[var_name] = CropSceneSourceFiles(
                     scene_id=self.scene_id,
                     data_path=self.data_path,
-                    aux_name=f"__extra__{self.source_name}__{var_name}",
+                    aux_name=f"{EXTRA_PRODUCT_SENTINEL}{self.source_name}{EXTRA_PRODUCT_SEPERATOR}{var_name}",
                 )
             return tasks
 
