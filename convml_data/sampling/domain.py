@@ -207,8 +207,8 @@ class LatLonPointsSpanningDomain(rc.LocalCartesianDomain):
 
         # find xy-position of all lat/lon positions in trajectories
         xy_pts = dummy_domain.crs.transform_points(
-            x=da_lon,
-            y=da_lat,
+            x=da_lon.data,
+            y=da_lat.data,
             z=np.zeros_like(da_lon.data),
             src_crs=ccrs.PlateCarree(),
         )
