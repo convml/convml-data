@@ -273,7 +273,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
             tile_output["data"].write(da_tile)
 
             if "image" in tile_output:
-                img_tile = self._create_image(da_scene=da_tile, da_src=da_src)
+                img_tile = self._create_image(da_scene=da_tile)
 
                 if tile_N is not None:
                     if hasattr(img_tile, "size"):
