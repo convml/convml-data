@@ -2,7 +2,13 @@ from pathlib import Path
 
 import luigi
 import numpy as np
-from convml_tt.data.dataset import MovingWindowImageTilingDataset
+
+try:
+    from convml_tt.data.dataset import MovingWindowImageTilingDataset
+
+    HAS_CONVML_TT = True
+except ImportError:
+    HAS_CONVML_TT = False
 from PIL import Image
 
 from ... import DataSource
