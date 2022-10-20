@@ -72,6 +72,39 @@ def _calc_pressure(ds_alt_p):
     return ds_alt_p.p
 
 
+def _calc_layer_umag(da_u, da_v, layer_name):
+    ds = xr.merge([da_u, da_v])
+    if layer_name == "boundary_layer":
+        kwargs = levels_bl
+    elif layer_name == "cloud_layer":
+        kwargs = levels_cl
+    else:
+        raise NotImplementedError(layer_name)
+
+    ds_layer = ds.sel(**kwargs)
+    da_layer_umag = _calc_umag(da_u=ds_layer.u, da_v=ds_layer.v).mean(dim="level")
+    da_layer_umag.attrs[
+        "long_name"
+    ] = f"{layer_name} ({kwargs['level'].start} - {kwargs['level'].stop}) mean windspeed"
+    return da_layer_umag
+
+
+def _calc_bl_umag(da_u, da_v):
+    return _calc_layer_umag(da_u=da_u, da_v=da_v, layer_name="boundary_layer")
+
+
+def _calc_cl_umag(da_u, da_v):
+    return _calc_layer_umag(da_u=da_u, da_v=da_v, layer_name="cloud_layer")
+
+
+def _calc_column_total_precipitable_water(da_q, da_p):
+    da_dp = da_p.differentiate(coord="level")
+    da_tpw = 1.0 / 9.8 * (da_q * da_dp).sum(dim="level")
+    da_tpw.attrs["long_name"] = "total precipitable water"
+    da_tpw.attrs["units"] = "mm"
+    return da_tpw
+
+
 DERIVED_VARIABLES = dict(
     umag=(_calc_umag, ["u", "v"]),
     alt_p=(_calc_alt_p, ["q", "t", "z", "lnsp"]),
@@ -82,4 +115,7 @@ DERIVED_VARIABLES = dict(
     theta=(_calc_potential_temperature, ["p", "t"]),
     d_theta__lts=(calc_lts, ["alt_p", "theta"]),
     d_theta__eis=(calc_eis, ["alt_p", "theta", "d_theta__lts", "t", "z_lcl"]),
+    bl_umag=(_calc_bl_umag, ["u", "v"]),
+    cl_umag=(_calc_cl_umag, ["u", "v"]),
+    tpw=(_calc_column_total_precipitable_water, ["q", "p"]),
 )

@@ -98,13 +98,19 @@ def load_aux_file(scene_fn, bbox_crop=None):
     # aux fields we simply open so we can crop them
     # but we need to pick out the right variable in the dataset
     ds = xr.open_dataset(scene_fn)
+    if "lat" in ds.coords:
+        spatial_coords = {"lat", "lon"}
+    else:
+        spatial_coords = {"x", "y"}
+
     vars_2d = [
-        name for (name, da) in ds.data_vars.items() if set(da.dims) == {"x", "y"}
+        name for (name, da) in ds.data_vars.items() if set(da.dims) == spatial_coords
     ]
-    vars_2d.remove("DQF")
+    vars_2d = [v for v in vars_2d if not v.startswith("DQF")]
+
     if len(vars_2d) != 1:
         raise Exception(
-            "More than the data-quality variable (DQF) was found "
+            "More than the data-quality variable(s) (DQF) was found "
             f"in the aux dataset: {','.join(vars_2d)}"
         )
     var_name = vars_2d[0]
@@ -113,13 +119,15 @@ def load_aux_file(scene_fn, bbox_crop=None):
     scene.load([var_name])
 
     # use satpy's cropping for latlon-bbox crop
-    if bbox_crop is not None:
+    has_cropped = False
+    if bbox_crop is not None and spatial_coords == {"x", "y"}:
         if len(bbox_crop) != 4:
             raise Exception(bbox_crop)
         # satpy bbox: [WSEN]
         scene = scene.crop(
             ll_bbox=[bbox_crop[0], bbox_crop[2], bbox_crop[1], bbox_crop[3]]
         )
+        has_cropped = True
 
     da = scene[var_name]
     if "crs" in da.coords:
@@ -132,7 +140,7 @@ def load_aux_file(scene_fn, bbox_crop=None):
     # remove all attributes that satpy adds which can't be serialised to a netCDF file
     da = _cleanup_composite_da_attrs(da)
 
-    return da
+    return da, has_cropped
 
 
 def load_radiance_channel(

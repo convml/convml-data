@@ -25,7 +25,7 @@ def build_query_tasks(
             input_names = [1, 2, 3]
         elif product_name == "user_function":
             input_names = get_user_function_source_input_names(
-                product_meta=product_meta
+                source_name=source_name, product_meta=product_meta
             )
         elif product_name in goes16.DERIVED_PRODUCTS:
             input_names = [product_name]
@@ -94,7 +94,7 @@ def build_query_tasks(
                 ]
             elif product_name == "user_function":
                 required_inputs = get_user_function_source_input_names(
-                    product_meta=product_meta
+                    source_name=source_name, product_meta=product_meta
                 )
             elif product_name in era5.DERIVED_VARIABLES:
                 required_inputs = _find_source_variables_set(
@@ -185,7 +185,7 @@ class IncompleteSourceDefition(Exception):
     pass
 
 
-def get_user_function_source_input_names(product_meta):
+def get_user_function_source_input_names(source_name, product_meta):
     if "input" not in product_meta:
         raise IncompleteSourceDefition(
             "To use a `user_function` you will need to define its inputs"
@@ -198,6 +198,11 @@ def get_user_function_source_input_names(product_meta):
         input_names = list(source_inputs.keys())
     else:
         raise NotImplementedError(source_inputs)
+
+    if source_name == "era5":
+        if any(var_name in era5.DERIVED_VARIABLES for var_name in input_names):
+            raise NotImplementedError(input_names)
+
     return input_names
 
 
@@ -254,10 +259,16 @@ def _load_goes16_file(path, var_name, bbox_crop=None, **kwargs):
         da = goes16.satpy_rgb.load_radiance_channel(
             scene_fn=path, channel_number=var_name, bbox_crop=bbox_crop, **kwargs
         )
+        has_cropped = True
     else:
-        da = goes16.satpy_rgb.load_aux_file(scene_fn=path, bbox_crop=bbox_crop)
+        import ipdb
 
-    return da
+        with ipdb.launch_ipdb_on_exception():
+            da, has_cropped = goes16.satpy_rgb.load_aux_file(
+                scene_fn=path, bbox_crop=bbox_crop
+            )
+
+    return da, has_cropped
 
 
 def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
@@ -291,7 +302,7 @@ def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
             if channel_prefix == "bt":
                 derived_variable = "brightness_temperature"
 
-            da = _load_goes16_file(
+            da, has_cropped = _load_goes16_file(
                 var_name=channel_number,
                 path=task_input.path,
                 bbox_crop=bbox_crop,
@@ -299,11 +310,14 @@ def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
             )
             da["channel"] = channel_number
         except ValueError:
-            da = _load_goes16_file(
+            da, has_cropped = _load_goes16_file(
                 path=task_input[product].path,
                 bbox_crop=bbox_crop,
                 var_name=product,
             )
+
+        if domain is not None and not has_cropped:
+            da = rc.crop_field_to_domain(domain=domain, da=da)
 
     if "lat" not in da.coords or "lon" not in da.coords:
         coords = rc.coords.get_latlon_coords_using_crs(da=da)

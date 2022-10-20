@@ -21,3 +21,10 @@ def cloud_mask_ch13bt(da_bt_13):
 def inversion_strength(da_q, da_t, da_lnsp, da_z):
     # XXX: return something more useful
     return da_lnsp
+
+
+def boundary_layer_windspeed(da_u, da_v, da_p):
+    import ipdb
+
+    ipdb.set_trace()
+    pass
