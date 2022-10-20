@@ -1,3 +1,4 @@
+import socket
 from pathlib import Path
 
 import luigi
@@ -6,7 +7,7 @@ from convml_data import DataSource
 from convml_data.pipeline import GenerateRegriddedScenes, GenerateTiles
 
 EXAMPLE_FILEPATH = str(Path(__file__).parent / "example")
-HAS_JASMIN_ACCESS = True
+HAS_JASMIN_ACCESS = socket.getfqdn() in ["thixo"]
 
 
 def test_make_triplets():

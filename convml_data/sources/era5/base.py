@@ -1,3 +1,5 @@
+from functools import partial
+
 import numpy as np
 import xarray as xr
 from eurec4a_environment.variables import atmos as atmos_variables
@@ -89,6 +91,21 @@ def _calc_layer_umag(da_u, da_v, layer_name):
     return da_layer_umag
 
 
+def _calc_layer_qmean(da_q, layer_name):
+    if layer_name == "boundary_layer":
+        kwargs = levels_bl
+    elif layer_name == "cloud_layer":
+        kwargs = levels_cl
+    else:
+        raise NotImplementedError(layer_name)
+
+    da_layer_q = da_q.sel(**kwargs).mean(dim="level", keep_attrs=True)
+    da_layer_q.attrs[
+        "long_name"
+    ] = f"{layer_name} ({kwargs['level'].start} - {kwargs['level'].stop}) mean total moisture"
+    return da_layer_q
+
+
 def _calc_bl_umag(da_u, da_v):
     return _calc_layer_umag(da_u=da_u, da_v=da_v, layer_name="boundary_layer")
 
@@ -115,7 +132,18 @@ DERIVED_VARIABLES = dict(
     theta=(_calc_potential_temperature, ["p", "t"]),
     d_theta__lts=(calc_lts, ["alt_p", "theta"]),
     d_theta__eis=(calc_eis, ["alt_p", "theta", "d_theta__lts", "t", "z_lcl"]),
-    bl_umag=(_calc_bl_umag, ["u", "v"]),
-    cl_umag=(_calc_cl_umag, ["u", "v"]),
+    bl_umag=(
+        partial(_calc_layer_umag, layer_name="boundary_layer"),
+        ["u", "v"],
+    ),
+    cl_umag=(partial(_calc_layer_umag, layer_name="cloud_layer"), ["u", "v"]),
+    bl_qmean=(
+        partial(_calc_layer_qmean, layer_name="boundary_layer"),
+        ["q"],
+    ),
+    cl_qmean=(
+        partial(_calc_layer_qmean, layer_name="cloud_layer"),
+        ["q"],
+    ),
     tpw=(_calc_column_total_precipitable_water, ["q", "p"]),
 )
