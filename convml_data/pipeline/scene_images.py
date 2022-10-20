@@ -10,7 +10,7 @@ class SceneImageMixin(object):  # noqa
                 image_function = None
             else:
                 image_function = self.data_source.aux_products[self.aux_name].get(
-                    "image_function", "default"
+                    "image_function", None
                 )
         else:
             image_function = self.data_source._meta.get("image_function", "default")
