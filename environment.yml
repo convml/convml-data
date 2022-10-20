@@ -10,3 +10,5 @@ dependencies:
   - xarray
   - cartopy
   - xesmf
+  # must install pykdtre with conda so that it matches numpy
+  - pykdtree
