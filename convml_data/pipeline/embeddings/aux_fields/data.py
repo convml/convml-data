@@ -40,7 +40,6 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
     data_path = luigi.Parameter(default=".")
     crop_pad_ptc = luigi.FloatParameter(default=0.1)
-    create_aux_tile_images = luigi.BoolParameter(default=False)
     tile_reduction_op = luigi.Parameter(default="mean")
 
     def requires(self):
@@ -55,7 +54,6 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             scene_id=self.scene_id,
             tiles_kind=self.tiles_kind,
             extra_args=aux_kwargs,
-            create_images=self.create_aux_tile_images,
         )
         tasks["embeddings"] = SceneTileEmbeddings(
             data_path=self.data_path,

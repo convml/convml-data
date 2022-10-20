@@ -35,7 +35,12 @@ class SlidingWindowImageEmbeddings(luigi.Task):
     N_tile = luigi.IntParameter()
 
     def run(self):
-        model = TripletTrainerModel.load_from_checkpoint(self.model_path)
+        if hasattr(self, "data_path"):
+            model_path = Path(self.data_path) / self.model_path
+        else:
+            model_path = self.model_path
+
+        model = TripletTrainerModel.load_from_checkpoint(model_path)
         model.freeze()
 
         model_transforms = get_model_transforms(
