@@ -99,6 +99,8 @@ def dist_plots(
     N_subplots = len(statistics)
     if N_subplots > col_max:
         N_cols = col_max
+    else:
+        N_cols = N_subplots
     N_rows = math.ceil(N_subplots / N_cols)
 
     fig, axes = plt.subplots(
