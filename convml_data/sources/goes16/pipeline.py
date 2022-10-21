@@ -7,6 +7,8 @@ import satdata
 
 from ...utils.luigi import XArrayTarget, YAMLTarget
 
+DERIVED_PRODUCTS = satdata.Goes16AWS.PRODUCTS.keys()
+
 
 class DatetimeListParameter(luigi.Parameter):
     def parse(self, x):
@@ -66,7 +68,7 @@ class GOES16Query(luigi.Task):
 
 
 class GOES16Fetch(luigi.Task):
-    keys = luigi.ListParameter()
+    filename = luigi.Parameter()
     data_path = luigi.Parameter()
     offline_cli = luigi.BoolParameter(default=False)
 
@@ -78,8 +80,7 @@ class GOES16Fetch(luigi.Task):
         )
 
     def run(self):
-        self.cli.download(list(self.keys))
+        self.cli.download([self.filename])
 
     def output(self):
-        targets = [XArrayTarget(str(Path(self.data_path) / key)) for key in self.keys]
-        return targets
+        return XArrayTarget(str(Path(self.data_path) / self.filename))

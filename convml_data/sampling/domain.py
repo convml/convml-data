@@ -184,8 +184,6 @@ def _calc_latlon_center(lat, lon):
     hyp_center = np.sqrt(x_ * x_ + y_ * y_)
     lat_center = np.arctan2(z_, hyp_center)
 
-    print(lat_center, lon_center)
-
     return lat_center * 180.0 / np.pi, lon_center * 180.0 / np.pi
 
 
@@ -207,8 +205,8 @@ class LatLonPointsSpanningDomain(rc.LocalCartesianDomain):
 
         # find xy-position of all lat/lon positions in trajectories
         xy_pts = dummy_domain.crs.transform_points(
-            x=da_lon,
-            y=da_lat,
+            x=da_lon.data,
+            y=da_lat.data,
             z=np.zeros_like(da_lon.data),
             src_crs=ccrs.PlateCarree(),
         )

@@ -4,18 +4,22 @@ pipeline tasks related to spatial cropping, reprojection and sampling of scene d
 from pathlib import Path
 
 import luigi
-import regridcart as rc
 
 from .. import DataSource
-from ..sources import build_fetch_tasks, extract_variable
+from ..sources import build_fetch_tasks, extract_variable, get_required_extra_fields
 from ..utils.luigi import ImageTarget, XArrayTarget
-from .aux_sources import CheckForAuxiliaryFiles
+from .aux_sources import (
+    EXTRA_PRODUCT_SENTINEL,
+    EXTRA_PRODUCT_SEPERATOR,
+    AuxTaskMixin,
+    CheckForAuxiliaryFiles,
+)
 from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
 from .utils import SceneBulkProcessingBaseTask
 
 
-class SceneSourceFiles(luigi.Task):
+class SceneSourceFiles(luigi.Task, AuxTaskMixin):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
     aux_name = luigi.OptionalParameter(default=None)
@@ -29,18 +33,12 @@ class SceneSourceFiles(luigi.Task):
             return CheckForAuxiliaryFiles(
                 data_path=self.data_path, aux_name=self.aux_name
             )
-        else:
-            return GenerateSceneIDs(data_path=self.data_path)
+
+        return GenerateSceneIDs(data_path=self.data_path)
 
     def _build_fetch_tasks(self):
         task = None
-        ds = self.data_source
-
-        if self.aux_name is None:
-            source_name = ds.source
-        else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-        source_data_path = Path(self.data_path) / "source_data" / source_name
+        source_data_path = Path(self.data_path) / "source_data" / self.source_name
 
         if self.input().exists():
             all_source_files = self.input().open()
@@ -52,7 +50,7 @@ class SceneSourceFiles(luigi.Task):
             scene_source_files = all_source_files[self.scene_id]
             task = build_fetch_tasks(
                 scene_source_files=scene_source_files,
-                source_name=source_name,
+                source_name=self.source_name,
                 source_data_path=source_data_path,
             )
 
@@ -64,24 +62,39 @@ class SceneSourceFiles(luigi.Task):
             yield fetch_tasks
 
     def output(self):
-        source_task = self._build_fetch_tasks()
-        if source_task is not None:
-            return source_task.output()
+        source_tasks = self._build_fetch_tasks()
+        if source_tasks is not None:
+            return {
+                input_name: source_task.output()
+                for (input_name, source_task) in source_tasks.items()
+            }
         else:
             return luigi.LocalTarget(f"__fake_target__{self.scene_id}__")
 
 
-class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
+class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
     scene_id = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
-    pad_ptc = luigi.FloatParameter(default=0.1)
+    pad_ptc = luigi.FloatParameter(default=0.15)
     aux_name = luigi.OptionalParameter(default=None)
 
-    @property
-    def data_source(self):
-        return DataSource.load(path=self.data_path)
-
     def requires(self):
+        required_extra_fields = get_required_extra_fields(
+            data_source=self.source_name, product=self.product_name
+        )
+
+        if required_extra_fields is not None:
+            # create a child tasks which create cropped versions of required
+            # extra fields to create the requested product
+            tasks = {}
+            for var_name in required_extra_fields:
+                tasks[var_name] = CropSceneSourceFiles(
+                    scene_id=self.scene_id,
+                    data_path=self.data_path,
+                    aux_name=f"{EXTRA_PRODUCT_SENTINEL}{self.source_name}{EXTRA_PRODUCT_SEPERATOR}{var_name}",
+                )
+            return tasks
+
         return dict(
             data=SceneSourceFiles(
                 data_path=self.data_path,
@@ -95,46 +108,41 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         return self.data_source.domain
 
     def run(self):
-        data_source = self.data_source
-
-        if self.aux_name is None:
-            source_name = data_source.source
-            product_type = data_source.type
-            product_name = self.data_source.name
-            product_meta = dict(name=product_name)
-            if product_type == "user_function":
-                if "input" not in self.data_source._meta:
-                    raise Exception(
-                        "To use a user-function on the primary data-set being"
-                        " produced you need to define the channels used by defining"
-                        " the section `input` in the input `meta.yaml` file"
-                    )
-                else:
-                    product_meta["input"] = self.data_source._meta["input"]
-        else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product_type = self.data_source.aux_products[self.aux_name]["type"]
-            product_name = self.aux_name
-            product_meta = self.data_source.aux_products[self.aux_name]
-
-        da_full = extract_variable(
-            task_input=self.input()["data"],
-            data_source=source_name,
-            product=product_type,
-            product_meta=product_meta,
-        )
-
         domain = self.domain
-        da_cropped = rc.crop_field_to_domain(
-            domain=domain, da=da_full, pad_pct=self.pad_ptc
+
+        required_extra_fields = get_required_extra_fields(
+            data_source=self.source_name, product=self.product_name
         )
 
-        img_cropped = self._create_image(da_scene=da_cropped, da_src=da_full)
+        if required_extra_fields is not None:
+            inputs = self.input()
+            task_input = {v: inputs[v]["data"] for v in required_extra_fields}
+        else:
+            task_input = self.input()["data"]
+
+        import ipdb
+
+        with ipdb.launch_ipdb_on_exception():
+            da_cropped = extract_variable(
+                task_input=task_input,
+                data_source=self.source_name,
+                product=self.product_name,
+                # the provided "domain" is used for cropping, but cropping
+                # isn't needed when the field to be extracted is derived from
+                # other fields ("required_extra_fields") as they will have been
+                # cropped already
+                domain=required_extra_fields is None and domain or None,
+                product_meta=self.product_meta,
+            )
+
+        if "image" in self.output():
+            img_cropped = self._create_image(da_scene=da_cropped)
 
         self.output_path.mkdir(exist_ok=True, parents=True)
         self.output()["data"].write(da_cropped)
 
-        self.output()["image"].write(img_cropped)
+        if "image" in self.output():
+            self.output()["image"].write(img_cropped)
 
     @property
     def output_path(self):
@@ -143,11 +151,13 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         output_path = Path(self.data_path) / "source_data"
 
         if self.aux_name is None:
-            output_path = output_path / ds.source / ds.type
+            output_path = output_path / ds.source / ds.product
         else:
-            source_type = self.data_source.aux_products[self.aux_name]["type"]
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-            output_path = output_path / source_name / source_type
+            product_name = self.product_name
+            source_name = self.source_name
+            if product_name == "user_function":
+                product_name = f"{product_name}__{self.aux_name}"
+            output_path = output_path / source_name / product_name
 
         output_path = output_path / "cropped"
 
@@ -159,8 +169,9 @@ class CropSceneSourceFiles(luigi.Task, SceneImageMixin):
         fn_data = f"{self.scene_id}.nc"
         outputs = dict(data=XArrayTarget(str(data_path / fn_data)))
 
-        fn_image = f"{self.scene_id}.png"
-        outputs["image"] = ImageTarget(str(data_path / fn_image))
+        if self.image_function is not None:
+            fn_image = f"{self.scene_id}.png"
+            outputs["image"] = ImageTarget(str(data_path / fn_image))
 
         return outputs
 

@@ -1,0 +1,107 @@
+source: goes16
+product: truecolor_rgb
+
+aux_products:
+  cloud_top_temperature:
+    source: ceres
+    product: goes16n__cloud_top_temperature
+  total_net_radiation:
+    source: ceres
+    product: goes16n__approximate_toa_net_radiation_flux
+  sea_surface_temperature:
+    source: era5
+    product: sst
+  zonal_wind:
+    source: era5
+    product: u
+    image_function: null
+  estimated_inversion_strength:
+    source: era5
+    product: d_theta__eis
+  lower_tropospheric_stability:
+    source: era5
+    product: d_theta__lts
+  relative_humidity:
+    source: era5
+    product: rh
+    image_function: null
+  #bl_relative_humidity:
+    #source: era5
+    #product: user_function
+    #input: [rh]
+  cloud_mask_ch13bt:
+    source: goes16
+    product: user_function
+    input: [bt_13]
+    image_function: null
+  cloud_top_height_goes16:
+    source: goes16
+    product: ACHA
+  lifting_condensation_level:
+    source: era5
+    product: z_lcl
+  total_water_vapour:
+    source: era5
+    product: q
+    image_function: null
+  absolute_temperature:
+    source: era5
+    product: t
+    image_function: null
+  boundary_layer_windspeed:
+    source: era5
+    product: bl_umag
+    image_function: null
+  cloud_layer_windspeed:
+    source: era5
+    product: cl_umag
+    image_function: null
+  boundary_layer_mean_total_moisture:
+    source: era5
+    product: bl_qmean
+    image_function: null
+  cloud_layer_mean_total_moisture:
+    source: era5
+    product: cl_qmean
+    image_function: null
+  toa_reflected_shortwave_ceres:
+    source: ceres
+    product: goes16n__broadband_shortwave_flux
+  toa_reflected_shortwave_goes:
+    source: goes16
+    product: RSR
+  total_precipitable_water_goes:
+    source: goes16
+    product: TPW
+  total_precipitable_water_era5:
+    source: era5
+    product: tpw
+  liquidice_water_path_ceres:
+    source: ceres
+    product: goes16n__cloud_lwp_iwp
+  cloud_phase_ceres:
+    source: ceres
+    product: goes16n__cloud_phase
+
+
+time:
+  N_days: 1
+  t_start: 2020-02-02 10:00
+  filters:
+    N_hours_from_zenith: 0.2
+
+domain:
+  central_latitude: 13.3
+  central_longitude: -57.5
+  l_zonal: 400.0e+3
+  l_meridional: 400.0e+3
+
+sampling:
+  resolution: 1000.0
+  rect-slidingwindow:
+    tile_N: 256
+  triplets:
+    scene_collections_splitting: random_by_relative_sample_size
+    N_triplets: {train: 2}
+    tile_N: 256
+    neigh_dist_scaling: 0.1  # fraction of tile-size that neighbor is offset from anchor center

@@ -1,31 +1,39 @@
 from ..sources import create_image as create_source_image
+from ..sources import user_functions
 
 
-class SceneImageMixin(object):
-    def _create_image(self, da_scene, da_src):
-        data_source = self.data_source
-
-        if self.aux_name is None:
-            source_name = data_source.source
-            product = data_source.type
-            product_name = data_source.name
+class SceneImageMixin(object):  # noqa
+    @property
+    def image_function(self):
+        if self.aux_name is not None:
+            if "__extra__" in self.aux_name:
+                image_function = None
+            else:
+                image_function = self.data_source.aux_products[self.aux_name].get(
+                    "image_function", None
+                )
         else:
-            source_name = self.data_source.aux_products[self.aux_name]["source"]
-            product = self.data_source.aux_products[self.aux_name]["type"]
-            product_name = self.aux_name
+            image_function = self.data_source._meta.get("image_function", "default")
+        return image_function
 
-        if source_name == "goes16" and product == "truecolor_rgb":
-            # to be able to create a RGB image with satpy we need to set the
-            # attrs again to ensure we get a proper RGB image
-            da_scene.attrs.update(da_src.attrs)
+    def _create_image(self, da_scene):
+        image_function = self.image_function
 
-        # if self.aux_name is not None:
-        # invert_colors = data_source.aux_products[self.aux_name].get("invert_values_for_rgb", False)
+        if image_function is None:
+            raise Exception("Shouldn't call ._create_image() if image_function == None")
+
+        if image_function != "default":
+            image_function = user_functions.get_user_function(
+                context=dict(
+                    datasource_path=self.data_path, product_identifier=image_function
+                )
+            )
+
         img_domain = create_source_image(
-            da_scene=da_scene,
-            source_name=source_name,
-            product=product,
-            context=dict(datasource_path=self.data_path, product_name=product_name),
+            da_scene=da_scene.squeeze(),
+            source_name=self.source_name,
+            product=self.product_name,
+            image_function=image_function,
         )
 
         return img_domain

@@ -8,73 +8,83 @@ import seaborn as sns
 import xarray as xr
 
 from . import plot_types
-from .data import RegridEmbeddingsOnAuxField
+from .data import (
+    AggregatedDatasetScenesAuxFieldWithEmbeddings,
+    make_embedding_name,
+    make_transform_name,
+)
 
 
 class AggPlotBaseTask(luigi.Task):
-    scalar_name = luigi.Parameter()
+    aux_name = luigi.Parameter()
     scene_ids = luigi.OptionalParameter(default=[])
-    emb_filepath = luigi.Parameter()
-    datapath = luigi.Parameter()
+    tiles_kind = luigi.Parameter()
 
+    data_path = luigi.Parameter(default=".")
+
+    embedding_model_path = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
+    embedding_transform = luigi.Parameter(default=None)
+    embedding_transform_args = luigi.DictParameter(default={})
+
+    datapath = luigi.Parameter(default=".")
     column_function = luigi.Parameter(default=None)
     segments_filepath = luigi.Parameter(default=None)
     segmentation_threshold = luigi.FloatParameter(default=0.0005)
-    reduce_op = luigi.Parameter(default="mean")
+    tile_reduction_op = luigi.Parameter(default="mean")
 
     filters = luigi.OptionalParameter(default=None)
 
     filetype = luigi.Parameter(default="png")
 
     def requires(self):
-        kwargs = dict(
-            scalar_name=self.scalar_name,
-            emb_filepath=self.emb_filepath,
-            datapath=self.datapath,
-            column_function=self.column_function,
-            segments_filepath=self.segments_filepath,
-            segmentation_threshold=self.segmentation_threshold,
-            reduce_op=self.reduce_op,
-            filters=self.filters,
+        return AggregatedDatasetScenesAuxFieldWithEmbeddings(
+            data_path=self.data_path,
+            aux_name=self.aux_name,
+            tiles_kind=self.tiles_kind,
+            embedding_model_path=self.embedding_model_path,
+            embedding_model_args=self.embedding_model_args,
+            embedding_transform=self.embedding_transform,
+            embedding_transform_args=self.embedding_transform_args,
+            tile_reduction_op=self.tile_reduction_op,
         )
+        # kwargs = dict(
+        #     scalar_name=self.aux_name,
+        #     emb_filepath=self.emb_filepath,
+        #     datapath=self.datapath,
+        #     column_function=self.column_function,
+        #     segments_filepath=self.segments_filepath,
+        #     segmentation_threshold=self.segmentation_threshold,
+        #     reduce_op=self.reduce_op,
+        #     filters=self.filters,
+        # )
 
-        if isinstance(self.scene_ids, list) or isinstance(self.scene_ids, tuple):
-            task = RegridEmbeddingsOnAuxField(scene_ids=list(self.scene_ids), **kwargs)
-        elif self.scene_ids == "available_data":
-            base_task = RegridEmbeddingsOnAuxField(scene_ids=[], **kwargs)
-            scene_ids = []
-            for (scene_id, depd_task) in base_task.requires().items():
-                task_src = depd_task.requires()["data"]
-                if task_src.output().exists():
-                    scene_ids.append(scene_id)
-            if len(scene_ids) == 0:
-                raise Exception(f"No data available for `{self.scalar_name}`")
-            task = RegridEmbeddingsOnAuxField(scene_ids=scene_ids, **kwargs)
-        else:
-            raise NotImplementedError(self.scene_ids)
+        # if isinstance(self.scene_ids, list) or isinstance(self.scene_ids, tuple):
+        #     task = RegridEmbeddingsOnAuxField(scene_ids=list(self.scene_ids), **kwargs)
+        # elif self.scene_ids == "available_data":
+        #     base_task = RegridEmbeddingsOnAuxField(scene_ids=[], **kwargs)
+        #     scene_ids = []
+        #     for (scene_id, depd_task) in base_task.requires().items():
+        #         task_src = depd_task.requires()["data"]
+        #         if task_src.output().exists():
+        #             scene_ids.append(scene_id)
+        #     if len(scene_ids) == 0:
+        #         raise Exception(f"No data available for `{self.aux_name}`")
+        #     task = RegridEmbeddingsOnAuxField(scene_ids=scene_ids, **kwargs)
+        # else:
+        #     raise NotImplementedError(self.scene_ids)
 
-        return task
+        # return task
 
     def run(self):
-        da_emb_src = xr.open_dataarray(self.emb_filepath)
         ds = self.input().open()
-        self._ds = ds
-
-        common_dims = set(da_emb_src.dims).intersection(ds.dims)
-        for d in "scene_id x y".split():
-            if d in common_dims:
-                common_dims.remove(d)
-
-        assert len(common_dims) == 1
-        emb_dim = common_dims.pop()
-
-        scalar_dims = set(ds.dims)
-        scalar_dims.remove(emb_dim)
+        self._ds = ds  # for plot titles etc
+        var_name = f"{self.aux_name}__{self.tile_reduction_op}"
+        scalar_dims = set(ds[var_name].dims)
         ds_stacked = ds.stack(sample=scalar_dims)
 
-        different_vars = set(ds.data_vars.keys()).difference({self.scalar_name})
-        assert len(different_vars) == 1
-        emb_var = different_vars.pop()
+        emb_var = "emb"
+        emb_dim = set(ds.dims).difference(set(ds[var_name].dims)).pop()
 
         # remove `explained_variance` since merging into a pandas DataFrame
         # later otherwise doesn't work (since the different components will
@@ -82,25 +92,39 @@ class AggPlotBaseTask(luigi.Task):
         if "explained_variance" in ds_stacked:
             ds_stacked = ds_stacked.drop("explained_variance")
 
-        self._make_plot(ds_stacked=ds_stacked, emb_var=emb_var, emb_dim=emb_dim)
+        self._make_plot(
+            ds_stacked=ds_stacked, emb_var=emb_var, emb_dim=emb_dim, var_name=var_name
+        )
 
-    def _make_plot(self, ds_stacked, emb_var, emb_dim):
+    def _make_plot(self, ds_stacked, emb_var, emb_dim, var_name):
         raise NotImplementedError
 
     def _make_title(self):
         ds = self._ds
-        emb_name = Path(self.emb_filepath).stem
+        emb_name = make_embedding_name(
+            kind=self.tiles_kind,
+            model_path=self.embedding_model_path,
+            **self.embedding_model_args,
+        )
+
+        if self.embedding_transform is not None:
+            emb_name += "." + make_transform_name(
+                transform=self.embedding_transform,
+                **self.embedding_transform_args,
+            )
+
         dataset_name = Path(self.datapath).absolute().stem
+        n_scenes = len(np.unique(ds.scene_id.values))
+        n_tiles = len(np.unique(ds.tile_id.values))
         title_parts = [
-            f"{int(ds.scene_id.count())} scenes",
+            f"{n_tiles} tiles across {n_scenes} scenes",
             f"{emb_name} from {dataset_name}",
         ]
         agg_parts = []
         if self.column_function is not None:
             agg_parts.append(self.column_function)
 
-        if self.segments_filepath is not None or getattr(self, "n_scalar_bins", None):
-            agg_parts.append(f"{self.reduce_op} of ")
+        agg_parts.append(self.tile_reduction_op)
 
         if self.segments_filepath is not None:
             segmentation_id = Path(self.segments_filepath).name.replace(".nc", "")
@@ -112,9 +136,9 @@ class AggPlotBaseTask(luigi.Task):
         agg = " ".join(agg_parts)
 
         if len(agg) == 0:
-            title_parts.insert(0, f"{self.scalar_name}")
+            title_parts.insert(0, f"{self.aux_name}")
         else:
-            title_parts.insert(0, f"{agg} of {self.scalar_name}")
+            title_parts.insert(0, f"{agg} of {self.aux_name}")
 
         if self.filters:
             title_parts.append(self.filters)
@@ -123,14 +147,29 @@ class AggPlotBaseTask(luigi.Task):
         return title  # "\n".join(textwrap.wrap(text=title, width=40))
 
     def _build_output_name_parts(self):
-        emb_name = Path(self.emb_filepath).name.replace(".nc", "")
+        emb_name = make_embedding_name(
+            kind=self.tiles_kind,
+            model_path=self.embedding_model_path,
+            **self.embedding_model_args,
+        )
+        name_parts = [self.aux_name, self.tile_reduction_op, "by", emb_name]
 
-        name_parts = [
-            self.scalar_name,
-            "by",
-            emb_name,
-            self.plot_type,
-        ]
+        if self.embedding_transform is not None:
+            transform_model_args = dict(self.embedding_transform_args)
+            if "pretrained_model" in transform_model_args:
+                transform_name = transform_model_args["pretrained_model"].replace(
+                    "/", "__"
+                )
+            else:
+                transform_name = make_transform_name(
+                    transform=self.embedding_transform,
+                    **self.embedding_transform_args,
+                )
+            if transform_name != emb_name:
+                name_parts.append("transformed")
+                name_parts.append(transform_name)
+
+        name_parts.append(self.plot_type)
 
         if self.filters is not None:
             name_parts.append(self.filters.replace("=", ""))
@@ -140,9 +179,6 @@ class AggPlotBaseTask(luigi.Task):
 
         if self.segments_filepath is not None:
             name_parts.append(f"{self.segmentation_threshold}seg")
-
-        if self.segments_filepath is not None or self.column_function is not None:
-            name_parts.append(self.reduce_op)
 
         return name_parts
 
@@ -160,9 +196,9 @@ class ColumnScalarEmbeddingScatterPlot(AggPlotBaseTask):
 
     def reduce(self, da):
         try:
-            return getattr(da, self.reduce_op)()
+            return getattr(da, self.tile_reduction_op)()
         except AttributeError:
-            raise NotImplementedError(self.reduce_op)
+            raise NotImplementedError(self.tile_reduction_op)
 
     def _build_output_name_parts(self):
         name_parts = super()._build_output_name_parts()
@@ -175,19 +211,19 @@ class ColumnScalarEmbeddingScatterPlot(AggPlotBaseTask):
     def _make_plot(self, ds_stacked, emb_var, emb_dim):
         if self.n_scalar_bins is not None:
             bins = np.linspace(
-                ds_stacked[self.scalar_name].min(),
-                ds_stacked[self.scalar_name].max(),
+                ds_stacked[self.aux_name].min(),
+                ds_stacked[self.aux_name].max(),
                 self.n_scalar_bins,
             )
             bin_labels = 0.5 * (bins[1:] + bins[:-1])
             ds_stacked = self.reduce(
-                ds_stacked.groupby_bins(self.scalar_name, bins=bins, labels=bin_labels)
+                ds_stacked.groupby_bins(self.aux_name, bins=bins, labels=bin_labels)
             )
 
         data = {
             f"{emb_dim}=0": ds_stacked[emb_var].sel({emb_dim: 0}),
             f"{emb_dim}=1": ds_stacked[emb_var].sel({emb_dim: 1}),
-            self.scalar_name: ds_stacked[self.scalar_name],
+            self.aux_name: ds_stacked[self.aux_name],
         }
 
         df = pd.DataFrame(data, columns=data.keys())
@@ -197,7 +233,7 @@ class ColumnScalarEmbeddingScatterPlot(AggPlotBaseTask):
             x=f"{emb_dim}=0",
             y=f"{emb_dim}=1",
             ax=ax,
-            hue=self.scalar_name,
+            hue=self.aux_name,
             data=df,
             palette=self.cmap,
         )
@@ -231,7 +267,7 @@ class ColumnScalarEmbeddingContourPlot(AggPlotBaseTask):
             data = {
                 f"{emb_dim}=0": ds_subset[emb_var].sel({emb_dim: 0}),
                 f"{emb_dim}=1": ds_subset[emb_var].sel({emb_dim: 1}),
-                self.scalar_name: ds_subset[var_name],
+                self.aux_name: ds_subset[var_name],
             }
             df = pd.DataFrame(data, columns=data.keys())
 
@@ -270,7 +306,7 @@ class ColumnScalarEmbeddingContourPlot(AggPlotBaseTask):
             return x_bins, xr.concat(bin_fractions, dim=da.name)
 
         n_bins = self.n_scalar_bins
-        var_name = self.scalar_name
+        var_name = self.aux_name
         ds_ = ds_stacked
 
         bins, da_bin_fractions = find_cumulative_bins(da=ds_[var_name], n_bins=n_bins)
@@ -334,24 +370,30 @@ class ColumnScalarEmbeddingDistPlot(AggPlotBaseTask):
     statistics = luigi.OptionalListParameter(
         default=["mean", "sem", "min", "max", "std", "median"]
     )
+    dx = luigi.OptionalFloatParameter(default=0.1)
+    dy = luigi.OptionalParameter(default="dx")
 
-    def _make_plot(self, ds_stacked, emb_var, emb_dim):
+    def _make_plot(self, ds_stacked, emb_var, emb_dim, var_name):
         data = {
             f"{emb_dim}=0": ds_stacked[emb_var].sel({emb_dim: 0}),
             f"{emb_dim}=1": ds_stacked[emb_var].sel({emb_dim: 1}),
-            self.scalar_name: ds_stacked[self.scalar_name],
+            var_name: ds_stacked[var_name],
         }
         ds = xr.Dataset(data)
         ds[f"{emb_dim}=0"].attrs["units"] = "1"
         ds[f"{emb_dim}=1"].attrs["units"] = "1"
 
+        dx = self.dx
+        if self.dy == "dx":
+            dy = dx
+
         fig, _ = plot_types.dist_plots(
             ds=ds,
             x=f"{emb_dim}=0",
             y=f"{emb_dim}=1",
-            v=self.scalar_name,
-            dx=0.1,
-            dy=0.1,
+            v=var_name,
+            dx=dx,
+            dy=dy,
             cmap="jet",
             statistics=self.statistics,
         )

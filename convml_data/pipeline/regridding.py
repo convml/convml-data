@@ -8,7 +8,7 @@ from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..utils.domain_images import align_axis_x
 from ..utils.luigi import ImageTarget, XArrayTarget
-from .aux_sources import CheckForAuxiliaryFiles
+from .aux_sources import AuxTaskMixin, CheckForAuxiliaryFiles
 from .sampling import CropSceneSourceFiles, SceneSourceFiles, _SceneRectSampleBase
 from .scene_images import SceneImageMixin
 from .scene_sources import GenerateSceneIDs
@@ -34,7 +34,7 @@ def _plot_scene_aux(da_aux, img, **kwargs):
     return fig, axes
 
 
-class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
+class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
     """
     Regrid the scene source data to a fixed Cartesian resolution
     """
@@ -101,14 +101,19 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
                 method = "bilinear"
             else:
                 method = "nearest_s2d"
-            da_domain = rc.resample(domain=domain, da=da_src, dx=dx, method=method)
+
+            da_domain = rc.resample(
+                domain=domain, da=da_src, dx=dx, method=method, keep_attrs=True
+            )
+
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
         else:
             da_domain = domain_output["data"].open()
 
-        img_domain = self._create_image(da_scene=da_domain, da_src=da_src)
-        img_domain.save(str(domain_output["image"].fn))
+        if "image" in self.output():
+            img_domain = self._create_image(da_scene=da_domain)
+            img_domain.save(str(domain_output["image"].fn))
 
     def output(self):
         scene_data_path = Path(self.data_path) / "rect"
@@ -117,11 +122,14 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin):
             scene_data_path = scene_data_path / "aux" / self.aux_name
 
         fn_data = f"{self.scene_id}.nc"
-        fn_image = f"{self.scene_id}.png"
-        return dict(
+        outputs = dict(
             data=XArrayTarget(str(scene_data_path / fn_data)),
-            image=ImageTarget(str(scene_data_path / fn_image)),
         )
+
+        if self.image_function is not None:
+            fn_image = f"{self.scene_id}.png"
+            outputs["image"] = ImageTarget(str(scene_data_path / fn_image))
+        return outputs
 
 
 class GenerateRegriddedScenes(SceneBulkProcessingBaseTask):

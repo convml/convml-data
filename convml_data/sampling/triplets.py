@@ -12,10 +12,11 @@ def generate_randomly_located_tile(domain, tile_size, rng=None):
     domain_bounds = domain.spatial_bounds
     domain_bounds_geometry = domain.spatial_bounds_geometry
 
-    d_xmin = np.min(domain_bounds[..., 0]) + tile_size / 2.0
-    d_xmax = np.max(domain_bounds[..., 0]) - tile_size / 2.0
-    d_ymin = np.min(domain_bounds[..., 1]) + tile_size / 2.0
-    d_ymax = np.max(domain_bounds[..., 1]) - tile_size / 2.0
+    margin = tile_size * 2.0 / 3.0
+    d_xmin = np.min(domain_bounds[..., 0]) + margin
+    d_xmax = np.max(domain_bounds[..., 0]) - margin
+    d_ymin = np.min(domain_bounds[..., 1]) + margin
+    d_ymax = np.max(domain_bounds[..., 1]) - margin
 
     if rng is None:
         rng = np.random.default_rng(rng)
