@@ -8,7 +8,7 @@ from .. import DataSource
 from ..sampling import domain as sampling_domain
 from ..utils.luigi import DBTarget, XArrayTarget, YAMLTarget
 from . import trajectory_tiles, triplets
-from .aux_sources import CheckForAuxiliaryFiles
+from .aux_sources import AuxTaskMixin, CheckForAuxiliaryFiles
 from .rect import tiles as rect_tiles
 from .regridding import SceneRegriddedData
 from .sampling import (
@@ -178,7 +178,7 @@ class CropSceneSourceFilesForTiles(CropSceneSourceFiles):
         return output_path.parent / f"cropped_for_{self.tiles_kind}"
 
 
-class SceneTilesData(_SceneRectSampleBase, SceneImageMixin):
+class SceneTilesData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
     """
     Generate all tiles for a specific scene
     """

@@ -184,8 +184,6 @@ def _calc_latlon_center(lat, lon):
     hyp_center = np.sqrt(x_ * x_ + y_ * y_)
     lat_center = np.arctan2(z_, hyp_center)
 
-    print(lat_center, lon_center)
-
     return lat_center * 180.0 / np.pi, lon_center * 180.0 / np.pi
 
 
