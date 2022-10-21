@@ -125,6 +125,21 @@ derived from `broadband_shortwave_albedo` and
 `broadband_shortwave_flux`.
 
 
+## `era5` source
+
+> NB: currently you will need access to JASMIN to be able to use ERA5
+> renanalysis data with convml-data
+
+
+```yaml
+source: era5
+product: {variable_name}
+```
+
+Available variables, 3D: `q`, `t`, `u`, `v`, `rh`, `p` and `alt`, 2D: `z_lcl`,
+`tpw`, `bl_umag`, `cl_umag`, `bl_qmean` and `cl_qmean`.
+
+
 ## The timespan of your data-source
 
 In the `time` section of `meta.yaml` you can define the timespan over which you
