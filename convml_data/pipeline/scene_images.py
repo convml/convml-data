@@ -29,14 +29,11 @@ class SceneImageMixin(object):  # noqa
                 )
             )
 
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            img_domain = create_source_image(
-                da_scene=da_scene.squeeze(),
-                source_name=self.source_name,
-                product=self.product_name,
-                image_function=image_function,
-            )
+        img_domain = create_source_image(
+            da_scene=da_scene.squeeze(),
+            source_name=self.source_name,
+            product=self.product_name,
+            image_function=image_function,
+        )
 
         return img_domain
