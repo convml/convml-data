@@ -278,10 +278,8 @@ aux_products:
   ir_shallow_clouds_ch11_ch14_ch15_v1:
     source: goes16
     product: user_function
-    input:
-      11: brightness_temperature
-      14: brightness_temperature
-      15: brightness_temperature
+    input: [bt_11, bt_14, bt_15]
+    image_function: default
 ```
 
 Second you will need to create a function matching the product name (here
@@ -320,7 +318,8 @@ def normalize(value, lower_limit, upper_limit, clip=True):
     return norm
 
 
-def ir_shallow_clouds_ch11_ch14_ch15_v1(da_scene):
+def ir_shallow_clouds_ch11_ch14_ch15_v1(da_bt_11, da_bt_14, da_bt_15):
+    da_scene = xr.concat([da_bt_11, da_bt_14, da_bt_15], dim="channel")
     bt_min, bt_max = 270, 300
     clip = True
 
