@@ -82,6 +82,11 @@ aux_products:
   cloud_phase_ceres:
     source: ceres
     product: goes16n__cloud_phase
+  ir_shallow_clouds_ch11_ch14_ch15_v1:
+    source: goes16
+    product: user_function
+    input: [bt_11, bt_14, bt_15]
+    image_function: ir_shallow_clouds_ch11_ch14_ch15_v1__img
 
 
 time:
