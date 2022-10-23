@@ -7,6 +7,8 @@ import luigi
 from convml_data import DataSource
 from convml_data.pipeline import GenerateRegriddedScenes, GenerateTiles
 
+# from convml_data.pipeline.embeddings.sampling import DatasetScenesTileEmbeddings
+
 EXAMPLE_FILEPATH = str(Path(__file__).parent / "example")
 HAS_JASMIN_ACCESS = socket.getfqdn() in ["thixo"]
 
@@ -36,6 +38,9 @@ def test_make_triplets():
         )
 
     assert luigi.build(tasks, local_scheduler=True)
+
+    # task_embs = DatasetScenesTileEmbeddings(data_path=EXAMPLE_FILEPATH)
+    # assert luigi.build(task_embs, local_scheduler=True)
 
 
 def test_make_regridded_domain_data():

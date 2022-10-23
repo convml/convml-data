@@ -255,18 +255,15 @@ def _extract_scene_data_for_user_function(task_input, product_meta, bbox_crop):
 
 
 def _load_goes16_file(path, var_name, bbox_crop=None, **kwargs):
-    if var_name in range(14):
+    if var_name in range(17):
         da = goes16.satpy_rgb.load_radiance_channel(
             scene_fn=path, channel_number=var_name, bbox_crop=bbox_crop, **kwargs
         )
         has_cropped = True
     else:
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            da, has_cropped = goes16.satpy_rgb.load_aux_file(
-                scene_fn=path, bbox_crop=bbox_crop
-            )
+        da, has_cropped = goes16.satpy_rgb.load_aux_file(
+            scene_fn=path, bbox_crop=bbox_crop
+        )
 
     return da, has_cropped
 

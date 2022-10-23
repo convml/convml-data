@@ -73,6 +73,9 @@ def _generic_rgb_from_scene(da_scene):
         dims.remove("rgb")
         dims.append("rgb")
         img_data = da_rgb.transpose(*dims).data[::-1, :, :]
+    elif "rgb" in da_scene.dims:
+        da_rgb = da_scene
+        img_data = da_rgb.data[::-1, :, :]
     else:
         dim0 = da_scene.dims[0]
         if len(da_scene[dim0]) > 3:
@@ -126,10 +129,8 @@ def rgb_image_from_scene_data(source_name, product, da_scene, image_function):
         if product == "truecolor_rgb" and "bands" in da_scene.coords:
             da_scene.attrs.update(dict(standard_name="true_color"))
             img_domain = goes16.satpy_rgb.rgb_da_to_img(da=da_scene)
-        elif product in goes16.DERIVED_PRODUCTS:
-            img_domain = _generic_rgb_from_scene(da_scene=da_scene)
         else:
-            raise NotImplementedError(product)
+            img_domain = _generic_rgb_from_scene(da_scene=da_scene)
     elif callable(image_function):
         img_domain = _rgb_image_from_user_function_scene_data(
             product=product, da_scene=da_scene, image_function=image_function
