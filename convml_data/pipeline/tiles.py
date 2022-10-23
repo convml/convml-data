@@ -345,7 +345,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
 
         tiles_data_path = Path(self.data_path) / self.tiles_kind
         if self.aux_name is not None:
-            tiles_data_path /= self.aux_name
+            tiles_data_path = tiles_data_path / "aux" / self.aux_name
 
         outputs = {}
 
