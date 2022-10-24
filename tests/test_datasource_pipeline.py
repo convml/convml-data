@@ -15,6 +15,8 @@ try:
 except ImportError:
     HAS_CONVML_TT = False
 
+# from convml_data.pipeline.embeddings.sampling import DatasetScenesTileEmbeddings
+
 EXAMPLE_FILEPATH = str(Path(__file__).parent / "example")
 HAS_JASMIN_ACCESS = socket.getfqdn() in ["thixo"]
 
