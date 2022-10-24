@@ -373,6 +373,16 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
         # prefix each variable passed in with `da_` to indicate that it is a DataArray
         kwargs = {f"da_{v}": da for (v, da) in das.items()}
         da = user_function(**kwargs)
+        if "long_name" not in da.attrs:
+            raise Exception(
+                "You should set the `long_name` attribute when creating the"
+                f" `{input_name}` field"
+            )
+        if "units" not in da.attrs:
+            raise Exception(
+                "You should set the `units` attribute when creating the"
+                f" `{input_name}` field"
+            )
         do_crop = False
 
     elif data_source == "ceres":

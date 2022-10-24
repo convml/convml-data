@@ -84,7 +84,9 @@ def _calc_layer_umag(da_u, da_v, layer_name):
         raise NotImplementedError(layer_name)
 
     ds_layer = ds.sel(**kwargs)
-    da_layer_umag = _calc_umag(da_u=ds_layer.u, da_v=ds_layer.v).mean(dim="level")
+    da_layer_umag = _calc_umag(da_u=ds_layer.u, da_v=ds_layer.v).mean(
+        dim="level", keep_attrs=True
+    )
     da_layer_umag.attrs[
         "long_name"
     ] = f"{layer_name} ({kwargs['level'].start} - {kwargs['level'].stop}) mean windspeed"

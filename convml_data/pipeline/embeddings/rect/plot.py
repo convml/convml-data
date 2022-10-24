@@ -137,13 +137,10 @@ class RGBAnnotationMapImage(luigi.Task):
     render_tiles = luigi.BoolParameter(default=False)
 
     def make_plot(self, da_emb):
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            return make_rgb_annotation_map_image(
-                da_emb=da_emb,
-                rgb_components=self.rgb_components,
-            )
+        return make_rgb_annotation_map_image(
+            da_emb=da_emb,
+            rgb_components=self.rgb_components,
+        )
 
     def run(self):
         da_emb = xr.open_dataarray(self.input_path)

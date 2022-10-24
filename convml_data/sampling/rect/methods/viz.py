@@ -136,10 +136,7 @@ if __name__ == "__main__":
         # else:
         # raise NotImplementedError(da_emb.dims)
 
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            main(da=da, dataset_path=Path("."))
+        main(da=da, dataset_path=Path("."))
 
     if args.view:
         host("tmap.faerun", label_type="url_image", theme="dark", view="free")

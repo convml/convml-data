@@ -142,14 +142,11 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
         product_input = inputs["product"]
 
         # create a mapping from aux_scene_time -> aux_scene_filename(s)
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            aux_scenes_by_time = create_scenes_from_input_queries(
-                inputs=product_input,
-                source_name=self.source_name,
-                product=self.product_name,
-            )
+        aux_scenes_by_time = create_scenes_from_input_queries(
+            inputs=product_input,
+            source_name=self.source_name,
+            product=self.product_name,
+        )
 
         product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
             aux_scenes_by_time=aux_scenes_by_time,
