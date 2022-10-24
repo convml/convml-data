@@ -120,20 +120,17 @@ class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
         else:
             task_input = self.input()["data"]
 
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            da_cropped = extract_variable(
-                task_input=task_input,
-                data_source=self.source_name,
-                product=self.product_name,
-                # the provided "domain" is used for cropping, but cropping
-                # isn't needed when the field to be extracted is derived from
-                # other fields ("required_extra_fields") as they will have been
-                # cropped already
-                domain=required_extra_fields is None and domain or None,
-                product_meta=self.product_meta,
-            )
+        da_cropped = extract_variable(
+            task_input=task_input,
+            data_source=self.source_name,
+            product=self.product_name,
+            # the provided "domain" is used for cropping, but cropping
+            # isn't needed when the field to be extracted is derived from
+            # other fields ("required_extra_fields") as they will have been
+            # cropped already
+            domain=required_extra_fields is None and domain or None,
+            product_meta=self.product_meta,
+        )
 
         if "image" in self.output():
             img_cropped = self._create_image(da_scene=da_cropped)

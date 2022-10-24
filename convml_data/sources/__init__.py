@@ -261,12 +261,9 @@ def _load_goes16_file(path, var_name, bbox_crop=None, **kwargs):
         )
         has_cropped = True
     else:
-        import ipdb
-
-        with ipdb.launch_ipdb_on_exception():
-            da, has_cropped = goes16.satpy_rgb.load_aux_file(
-                scene_fn=path, bbox_crop=bbox_crop
-            )
+        da, has_cropped = goes16.satpy_rgb.load_aux_file(
+            scene_fn=path, bbox_crop=bbox_crop
+        )
 
     return da, has_cropped
 
