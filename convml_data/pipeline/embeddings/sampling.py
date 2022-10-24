@@ -116,15 +116,18 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
             df_tiles_scene = df_tiles[df_tiles.triplet_tile_id.isin(scene_tile_ids)]
             return df_tiles_scene
 
-        tile_dataset = ImageSingletDataset(
-            data_dir=tiles_path,
-            transform=model_transforms,
-            tile_type=tile_type.upper(),
-            stage=self.dataset_stage,
-            filter_func=_include_only_scene_tiles,
-        )
-
-        return tile_dataset
+        try:
+            tile_dataset = ImageSingletDataset(
+                data_dir=tiles_path,
+                transform=model_transforms,
+                tile_type=tile_type.upper(),
+                stage=self.dataset_stage,
+                filter_func=_include_only_scene_tiles,
+            )
+            return tile_dataset
+        except FileNotFoundError:
+            # no tiles in this scene
+            return []
 
     def output(self):
         emb_name = make_embedding_name(
