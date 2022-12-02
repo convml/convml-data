@@ -17,21 +17,19 @@ from ..triplets import TripletSceneSplits
 from ..utils import SceneBulkProcessingBaseTask
 from .defaults import PREDICTION_BATCH_SIZE
 from .rect.sampling import SceneSlidingWindowImageEmbeddings  # noqa
-from .sampling_base import make_embedding_name
+from .sampling_base import _EmbeddingModelMixin, make_embedding_name
 
 
-class _SceneTileEmbeddingsBase(luigi.Task):
+class _SceneTileEmbeddingsBase(luigi.Task, _EmbeddingModelMixin):
     data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
 
-    model_path = luigi.Parameter()
     prediction_batch_size = luigi.IntParameter(default=PREDICTION_BATCH_SIZE)
 
     def requires(self):
-        fp_model = Path(self.model_path)
-        fp_model_expected = Path(self.data_path) / "embedding_models"
-        if not fp_model.parent.absolute() != fp_model_expected.absolute():
-            raise Exception(f"embedding models should be stored in {fp_model_expected}")
+        fp_model = self.model_path
+        if not fp_model.exists():
+            raise Exception(f"Couldn't find model in path `{fp_model}`")
 
         return SceneTilesData(
             data_path=self.data_path,
@@ -73,7 +71,9 @@ class _SceneTileEmbeddingsBase(luigi.Task):
         raise NotImplementedError
 
     def output(self):
-        emb_name = make_embedding_name(model_path=self.model_path, kind=self.tiles_kind)
+        emb_name = make_embedding_name(
+            model_filename=self.model_filename, kind=self.tiles_kind
+        )
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
         fn_out = f"{self.scene_id}.nc"
 
@@ -106,6 +106,10 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
             if stl["triplet_collection"] == self.dataset_stage
         ]
 
+        if len(scene_tile_ids) == 0:
+            # can return anything with length zero
+            return []
+
         tile_type = self.tile_type
 
         def _include_only_scene_tiles(df_tiles):
@@ -128,7 +132,9 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
 
     def output(self):
         emb_name = make_embedding_name(
-            model_path=self.model_path, kind=self.tiles_kind, stage=self.dataset_stage
+            model_filename=self.model_filename,
+            kind=self.tiles_kind,
+            stage=self.dataset_stage,
         )
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
         fn_out = f"{self.scene_id}.{self.tile_type}.nc"
@@ -136,12 +142,12 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
         return XArrayTarget(str(path / fn_out))
 
 
-class SceneTileEmbeddings(luigi.Task):
+class SceneTileEmbeddings(luigi.Task, _EmbeddingModelMixin):
     data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    model_path = luigi.Parameter()
+    model_filename = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
     @property
@@ -149,11 +155,6 @@ class SceneTileEmbeddings(luigi.Task):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
-        fp_model = Path(self.model_path)
-        fp_model_expected = Path(self.data_path) / "embedding_models"
-        if not fp_model.parent.absolute() != fp_model_expected.absolute():
-            raise Exception(f"embedding models should be stored in {fp_model_expected}")
-
         if self.tiles_kind == "rect-slidingwindow":
             sampling_meta = self.datasource.sampling
             sampling_sw = sampling_meta.get("rect-slidingwindow")
@@ -167,7 +168,7 @@ class SceneTileEmbeddings(luigi.Task):
             return SceneSlidingWindowImageEmbeddings(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
-                model_path=self.model_path,
+                model_filename=self.model_filename,
                 N_tile=N_tile,
                 **dict(self.model_args),
             )
@@ -183,7 +184,7 @@ class SceneTileEmbeddings(luigi.Task):
                 tasks[tile_type] = SceneTripletTileEmbeddings(
                     data_path=self.data_path,
                     scene_id=self.scene_id,
-                    model_path=self.model_path,
+                    model_filename=self.model_filename,
                     tile_type=tile_type,
                     **model_args,
                 )
@@ -226,7 +227,9 @@ class SceneTileEmbeddings(luigi.Task):
                     return self.input()[tile_type]
 
             emb_name = make_embedding_name(
-                model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
+                model_filename=self.model_filename,
+                kind=self.tiles_kind,
+                **dict(model_args),
             )
             path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
             fn_out = f"{self.scene_id}.nc"
@@ -244,13 +247,13 @@ class DatasetScenesTileEmbeddings(SceneBulkProcessingBaseTask):
     tiles_kind = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
 
-    model_path = luigi.Parameter()
+    model_filename = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
     def _get_task_class_kwargs(self, scene_ids):
         return dict(
             tiles_kind=self.tiles_kind,
-            model_path=self.model_path,
+            model_filename=self.model_filename,
             model_args=self.model_args,
         )
 
@@ -324,20 +327,20 @@ class _AggregatedTileEmbeddingsTransformMixin:
 
         if "pretrained_model" not in transform_model_args:
             if self.__class__.__module__ == "convml_data.pipeline.embeddings.sampling":
-                embedding_model_path = self.model_path
+                embedding_model_filename = self.model_filename
                 embedding_model_args = self.model_args
             else:
-                embedding_model_path = self.embedding_model_path
+                embedding_model_filename = Path(self.embedding_model_path).name
                 embedding_model_args = self.embedding_model_args
 
             emb_model_name = make_embedding_name(
                 kind=self.tiles_kind,
-                model_path=embedding_model_path,
+                model_filename=embedding_model_filename,
                 **embedding_model_args,
             )
 
             fn = f"{emb_model_name}.{self.transform_name}.joblib"
-            fp_transform_model = Path(embedding_model_path).parent / fn
+            fp_transform_model = Path(embedding_model_filename).parent / fn
         else:
             fp_transform_model = None
 
@@ -361,14 +364,14 @@ class AggregatedDatasetScenesTileEmbeddings(
     tiles_kind = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
 
-    model_path = luigi.Parameter()
+    model_filename = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
     def requires(self):
         kwargs = dict(
             tiles_kind=self.tiles_kind,
             data_path=self.data_path,
-            model_path=self.model_path,
+            model_filename=self.model_filename,
             model_args=self.model_args,
         )
 
@@ -418,7 +421,7 @@ class AggregatedDatasetScenesTileEmbeddings(
                 name_parts.append(tile_type)
 
         emb_name = make_embedding_name(
-            model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
+            model_filename=self.model_filename, kind=self.tiles_kind, **dict(model_args)
         )
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
 

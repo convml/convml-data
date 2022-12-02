@@ -280,7 +280,11 @@ def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
         bbox_crop = [bbox_lons.min(), bbox_lons.max(), bbox_lats.min(), bbox_lats.max()]
 
     if product == "truecolor_rgb":
-        if not set(task_input.keys()) == {1, 2, 3}:
+        try:
+            input_keys = [int(v) for v in task_input.keys()]
+        except Exception:
+            input_keys = list(task_input.keys())
+        if not set(input_keys) == {1, 2, 3}:
             raise Exception(
                 "To create TrueColor RGB images for GOES-16 the first"
                 " three Radiance channels (1, 2, 3) are needed"

@@ -12,6 +12,7 @@ auxiliary scalar field. There are a few ways this co-location is done:
 """
 import importlib
 import inspect
+import os
 from pathlib import Path
 
 import luigi
@@ -20,6 +21,7 @@ import xarray as xr
 
 from ...aux_sources import CheckForAuxiliaryFiles
 from ...embeddings.sampling import (
+    AggregatedDatasetScenesTileEmbeddings,
     SceneTileEmbeddings,
     _AggregatedTileEmbeddingsTransformMixin,
     make_embedding_name,
@@ -35,7 +37,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    embedding_model_path = luigi.Parameter()
+    embedding_model_filename = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
@@ -59,7 +61,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             data_path=self.data_path,
             scene_id=self.scene_id,
             tiles_kind=self.tiles_kind,
-            model_path=self.embedding_model_path,
+            model_filename=self.embedding_model_filename,
             model_args=self.embedding_model_args,
         )
         return tasks
@@ -151,7 +153,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     def output(self):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
-            model_path=self.embedding_model_path,
+            model_filename=self.embedding_model_filename,
             **dict(self.embedding_model_args),
         )
 
@@ -176,7 +178,7 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
     aux_name = luigi.OptionalParameter()
     tiles_kind = luigi.Parameter()
 
-    embedding_model_path = luigi.Parameter()
+    embedding_model_filename = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
@@ -187,7 +189,7 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
         return dict(
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            embedding_model_path=self.embedding_model_path,
+            embedding_model_filename=self.embedding_model_filename,
             embedding_model_args=self.embedding_model_args,
             tile_reduction_op=self.tile_reduction_op,
         )
@@ -207,7 +209,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
     aux_name = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    embedding_model_path = luigi.Parameter()
+    embedding_model_filename = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
@@ -218,16 +220,20 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             data_path=self.data_path,
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            embedding_model_path=self.embedding_model_path,
+            embedding_model_filename=self.embedding_model_filename,
             embedding_model_args=self.embedding_model_args,
             tile_reduction_op=self.tile_reduction_op,
         )
+        tasks = {}
         if self.embedding_transform is None:
-            return DatasetScenesAuxFieldWithEmbeddings(**kwargs)
-
-        return AggregatedDatasetScenesAuxFieldWithEmbeddings(**kwargs)
+            tasks["embs"] = DatasetScenesAuxFieldWithEmbeddings(**kwargs)
+        else:
+            tasks["embs"] = AggregatedDatasetScenesAuxFieldWithEmbeddings(**kwargs)
+        return tasks
 
     def run(self):
+        emb_input = self.input()["embs"]
+
         if self.embedding_transform is None:
             datasets = []
             if self.tiles_kind in ["trajectories", "rect-slidingwindow"]:
@@ -237,7 +243,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             else:
                 raise NotImplementedError(self.tiles_kind)
 
-            for scene_id, inp in self.input().items():
+            for scene_id, inp in emb_input.items():
                 ds_scene = inp.open()
                 if len(ds_scene.data_vars) == 0:
                     # no tiles in this scene
@@ -253,7 +259,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             else:
                 ds = ds.set_coords(["scene_id"])
         else:
-            ds = self.input().open()
+            ds = emb_input.open()
             # if "pretrained_model" in self.embedding_model_args:
             # datasets = []
             # da_embs_scene
@@ -273,7 +279,7 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
     def output(self):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
-            model_path=self.embedding_model_path,
+            model_filename=self.embedding_model_filename,
             **dict(self.embedding_model_args),
         )
 
@@ -293,3 +299,130 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
         name = ".".join(name_parts)
         p = Path(self.data_path) / "embeddings" / "with_aux"
         return utils.XArrayTarget(str(p / (name + ".nc")))
+
+
+def symlink_external_models(data_path, external_data_path, model_filename):
+    """
+    Create symlink to enable use of model trained on one dataset to be used
+    with a different dataset. For the two datasets
+    `eurec4a-2018202-winter-midday` (stored in `data_path`) and
+    `eurec4a-2018-grl-triplets` (stored in `external_data_path`) below we want
+    to use the trained model from the latter dataset in the former. This is
+    achieved by creating a symlink in
+    `embeddings/models/{dataset_name}__{model_identifier}` where
+    `dataset_name` is inferred from the relative path names.
+
+    data
+    ├── eurec4a-20182020-winter-midday
+    │   └── embeddings
+    │       └── models
+    │           └── eurec4a-2018-grl-triplets__fixednorm-stage-2.triplets.stage__train.tile_type__anchor.isomap.joblib
+    │               -> ../../../eurec4a-2018-grl-triplets/embeddings/models/fixednorm-stage-2.triplets.stage__train.tile_type__anchor.isomap.joblib
+    └── eurec4a-2018-grl-triplets
+        └── embeddings
+            └── models
+                └── fixednorm-stage-2.triplets.stage__train.tile_type__anchor.isomap.joblib
+
+
+    """
+
+    # find commont prefix for the two data paths, we usually store all datasets
+    # in a common root
+    prefix = os.path.commonpath([data_path, external_data_path])
+    data_path_rel = Path(data_path).relative_to(prefix)
+    external_data_path_rel = Path(external_data_path).relative_to(prefix)
+
+    external_dataset_identifier = str(external_data_path_rel).replace("/", "__")
+    local_model_filename = f"{external_dataset_identifier}__{model_filename}"
+
+    ext_model_src_path = (
+        Path(prefix) / external_data_path_rel / "embeddings" / "models" / model_filename
+    )
+    # assert ext_model_src_path.exists()
+
+    models_path = Path(prefix) / data_path_rel / "embeddings" / "models"
+    assert models_path.exists()
+
+    ext_model_link_path = models_path / local_model_filename
+
+    if not ext_model_link_path.is_symlink():
+        ext_model_link_path.parent.mkdir(exist_ok=True, parents=True)
+        # for some reason os.path.relpath adds an extra `../` in front of the
+        # path, so we need to snip that off. Can't use
+        # pathlib.Path.relative_to() here because that requires the provided
+        # paths to be subpaths
+        ext_model_link_path.symlink_to(
+            os.path.relpath(ext_model_src_path, ext_model_link_path)[3:]
+        )
+    elif ext_model_link_path.is_symlink():
+        pass
+    elif ext_model_link_path.exists():
+        raise Exception(
+            f"{ext_model_link_path} exists but it is not a symlink, which it should be (!)"
+        )
+    return local_model_filename
+
+
+class AggDatasetScenesAuxFieldAndEmbsUsingExternalTransformModel(luigi.Task):
+    embedding_transform_model_data_path = luigi.Parameter()
+    embedding_transform_model_args = luigi.DictParameter()
+
+    aux_name = luigi.Parameter()
+    tiles_kind = luigi.Parameter()
+
+    embedding_transform = luigi.Parameter()
+    embedding_model_filename = luigi.Parameter()
+    embedding_model_args = luigi.DictParameter(default={})
+
+    data_path = luigi.Parameter(default=".")
+    tile_reduction_op = luigi.Parameter(default="mean")
+
+    def requires(self):
+        return AggregatedDatasetScenesTileEmbeddings(
+            data_path=self.embedding_transform_model_data_path,
+            model_filename=self.embedding_model_filename,
+            model_args=self.embedding_transform_model_args,
+            tiles_kind="triplets",
+            embedding_transform=self.embedding_transform,
+        )
+
+    def _build_agg_task(self):
+        emb_transform_model_task = self.requires()
+        transform_model_path = str(emb_transform_model_task.transform_model_path)
+
+        local_model_filename = symlink_external_models(
+            data_path=self.data_path,
+            external_data_path=self.embedding_transform_model_data_path,
+            model_filename=Path(transform_model_path).name,
+        )
+
+        # `pretrained_model` shouldn't contain the `embeddings/models` prefix
+        # or the `.joblib` suffix
+        pretrained_model = local_model_filename.replace(".joblib", "")
+
+        embedding_transform_args = dict(pretrained_model=pretrained_model)
+
+        embedding_model_filename = symlink_external_models(
+            data_path=self.data_path,
+            external_data_path=self.embedding_transform_model_data_path,
+            model_filename=self.embedding_model_filename,
+        )
+
+        agg_task = AggregatedDatasetScenesAuxFieldWithEmbeddings(
+            data_path=self.data_path,
+            tiles_kind=self.tiles_kind,
+            embedding_model_filename=embedding_model_filename,
+            embedding_model_args=self.embedding_model_args,
+            embedding_transform=self.embedding_transform,
+            embedding_transform_args=embedding_transform_args,
+            aux_name=self.aux_name,
+            tile_reduction_op=self.tile_reduction_op,
+        )
+
+        return agg_task
+
+    def run(self):
+        yield self._build_agg_task()
+
+    def output(self):
+        return self._build_agg_task().output()
