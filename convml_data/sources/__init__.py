@@ -173,6 +173,13 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
     else:
         raise NotImplementedError(source_name)
 
+    if not isinstance(scene_source_files, dict):
+        raise Exception(
+            "Please delete `scene_ids.yaml` and generate again, the stored scene"
+            " IDs don't contain a key for the scene components (i.e. they are in"
+            " the old format)"
+        )
+
     tasks = {
         input_name: FetchTask(filename=input_filename, **kwargs)
         for (input_name, input_filename) in scene_source_files.items()

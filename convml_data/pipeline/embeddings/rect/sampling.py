@@ -162,10 +162,12 @@ class SceneSlidingWindowImageEmbeddings(
         fn = "{}.nc".format(self.scene_id)
         emb_name = make_embedding_name(
             kind="rect-slidingwindow",
-            model_filename=self.model_filename,
+            model_name=self.model_name,
             step_size=self.step_size,
         )
-        p_out = Path(self.data_path) / "embeddings" / "rect" / emb_name / fn
+        p_out = (
+            Path(self.data_path) / "embeddings" / "rect-slidingwindow" / emb_name / fn
+        )
         return XArrayTarget(str(p_out))
 
 
