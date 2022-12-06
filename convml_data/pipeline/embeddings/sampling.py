@@ -301,7 +301,7 @@ def make_transform_name(transform, **transform_args):
 
 
 class _AggregatedTileEmbeddingsTransformMixin:
-    embedding_transform = luigi.Parameter()
+    embedding_transform = luigi.OptionalStrParameter()
     embedding_transform_args = luigi.DictParameter(default={})
 
     def _apply_transform(self, da_emb):

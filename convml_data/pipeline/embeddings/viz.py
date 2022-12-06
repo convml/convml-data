@@ -1,36 +1,43 @@
 from pathlib import Path
 
 import luigi
-from convml_tt.interpretation.plots import isomap2d as isomap2d_plot
+from convml_tt.interpretation.plots import manifold2d as manifold2d_plot
 
-from .sampling import AggregatedDatasetScenesTileEmbeddings, make_embedding_name
+from .sampling import (
+    AggregatedDatasetScenesTileEmbeddings,
+    TransformedAggregatedDatasetScenesTileEmbeddings,
+    make_embedding_name,
+)
 
 
 class TripletEmbeddingsManifoldPlot2D(luigi.Task):
     data_path = luigi.Parameter(default=".")
+    dataset_stage = luigi.Parameter()
 
     tile_size = luigi.OptionalFloatParameter(default=0.05)
     dl_sampling = luigi.OptionalFloatParameter(default=0.1)
 
-    model_path = luigi.Parameter()
-    transform_method = luigi.Parameter(default="isomap")
+    model_name = luigi.Parameter()
+    transform_method = luigi.Parameter()
 
     def requires(self):
         kwargs = dict(
             tiles_kind="triplets",
             data_path=self.data_path,
-            model_path=self.model_path,
+            model_name=self.model_name,
+            model_args=dict(dataset_stage=self.dataset_stage),
         )
 
-        TaskClass = AggregatedDatasetScenesTileEmbeddings
         tasks = {}
-        tasks["triplet_embeddings"] = TaskClass(
+        tasks["triplet_embeddings"] = AggregatedDatasetScenesTileEmbeddings(
             **kwargs,
         )
 
-        tasks["triplet_anchor_embeddings_manifold"] = TaskClass(
+        kwargs["model_args"].update(dict(tile_type="anchor"))
+        tasks[
+            "triplet_anchor_embeddings_manifold"
+        ] = TransformedAggregatedDatasetScenesTileEmbeddings(
             embedding_transform=self.transform_method,
-            model_args=dict(tile_type="anchor"),
             **kwargs,
         )
 
@@ -54,7 +61,7 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
             .sortby("tile_id")
         )
 
-        fig, _, _ = isomap2d_plot.make_manifold_reference_plot(
+        fig, _, _ = manifold2d_plot.make_manifold_reference_plot(
             da_embs=da_triplet_embs,
             method=self.transform_method,
             da_embs_manifold=da_anchor_manifold_embs,
@@ -65,7 +72,7 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
 
     def output(self):
         emb_name = make_embedding_name(
-            kind="triplets", model_path=self.model_path, transform=self.transform_method
+            kind="triplets", model_name=self.model_name, transform=self.transform_method
         )
 
         name_parts = [emb_name, self.transform_method, "png"]
