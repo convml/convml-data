@@ -87,9 +87,21 @@ aux_products:
     product: user_function
     input: [bt_11, bt_14, bt_15]
     image_function: ir_shallow_clouds_ch11_ch14_ch15_v1__img
-  ceres_syn1deg_net_radiation:
+  ceres_syn1deg_clear_sky_toa_lw_flux:
     source: ceres_syn1deg_modis
     product: observed_clear_sky_toa_lw_flux
+  ceres_syn1deg_clear_sky_toa_sw_flux:
+    source: ceres_syn1deg_modis
+    product: observed_clear_sky_toa_sw_flux
+  ceres_syn1deg_sw_cloud_radiative_effect:
+    source: ceres_syn1deg_modis
+    product: toa_sw_cre
+  ceres_syn1deg_lw_cloud_radiative_effect:
+    source: ceres_syn1deg_modis
+    product: toa_lw_cre
+  ceres_syn1deg_net_cloud_radiative_effect:
+    source: ceres_syn1deg_modis
+    product: toa_net_cre
 
 
 time:
