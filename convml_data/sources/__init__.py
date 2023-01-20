@@ -54,14 +54,14 @@ def build_query_tasks(
                 else:
                     raise NotImplementedError(input_name)
 
-                t = GOES16Query(
+                task = GOES16Query(
                     data_path=source_data_path,
                     time=t_center,
                     dt_max=dt_total / 2.0,
                     channel=channel_number,
                     product=product,
                 )
-                tasks.setdefault(input_name, []).append(t)
+                tasks.setdefault(input_name, []).append(task)
 
     elif source_name == "LES":
         kind, *variables = product_name.split("__")
@@ -117,12 +117,13 @@ def build_query_tasks(
         tasks = {}
         for t_start, t_end in time_intervals:
             for data_type in required_inputs:
-                tasks[data_type] = QueryTaskClass(
+                task = QueryTaskClass(
                     data_path=source_data_path,
                     t_start=t_start,
                     t_end=t_end,
                     data_type=data_type,
                 )
+                tasks.setdefault(data_type, []).append(task)
 
     else:
         raise NotImplementedError(source_name)
@@ -298,6 +299,7 @@ def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
             )
 
         scene_fns = [inp.path for inp in task_input.values()]
+
         da = goes16.satpy_rgb.load_rgb_files_and_get_composite_da(
             scene_fns=scene_fns, bbox_crop=bbox_crop
         )

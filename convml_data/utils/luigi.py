@@ -29,7 +29,10 @@ coloredlogs.install(level="DEBUG", logger=logger)
 class XArrayTarget(luigi.LocalTarget):
     def open(self, *args, **kwargs):
         # ds = xr.open_dataset(self.path, engine='h5netcdf', *args, **kwargs)
-        ds = xr.open_dataset(self.path, *args, **kwargs)
+        try:
+            ds = xr.open_dataset(self.path, *args, **kwargs)
+        except Exception as ex:
+            raise Exception(f"There was an issue opening {self.path}") from ex
 
         if len(ds.data_vars) == 1:
             name = list(ds.data_vars)[0]

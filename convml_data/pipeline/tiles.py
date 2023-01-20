@@ -43,6 +43,8 @@ class TilesInScene(luigi.Task):
         # we will write an empty file since we don't need to sample tiles
         # from this scene
         scene_tiles_meta = tiles_per_scene.get(self.scene_id, {})
+        if self.tiles_kind == "rect-slidingwindow" and len(scene_tiles_meta) == 0:
+            raise Exception
         self.output().write(scene_tiles_meta)
 
     def output(self):
@@ -339,7 +341,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
 
     def output(self):
         if not self.input()["tile_locations"].exists():
-            return luigi.LocalTarget("__fakefile__.nc")
+            return self.input()["tile_locations"]
 
         tiles_meta = self.input()["tile_locations"].open()
 
@@ -368,6 +370,7 @@ class SceneTilesData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
                 outputs[tile_identifier]["image"] = luigi.LocalTarget(
                     str(tile_data_path / fn_image)
                 )
+
         return outputs
 
 

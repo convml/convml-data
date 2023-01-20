@@ -159,14 +159,19 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
         name_parts = [
             self.scene_id,
             self.aux_name,
-            "by",
-            emb_name,
             f"tile_{self.tile_reduction_op}",
         ]
 
         fn = ".".join(name_parts) + ".nc"
 
-        p = Path(self.data_path) / "embeddings" / "with_aux" / self.tiles_kind / fn
+        p = (
+            Path(self.data_path)
+            / "embeddings"
+            / "with_aux"
+            / self.tiles_kind
+            / emb_name
+            / fn
+        )
         return utils.XArrayTarget(str(p))
 
 
@@ -255,26 +260,33 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
 
     @property
     def name_parts(self):
+        name_parts = [
+            "__all__",
+            self.aux_name,
+            f"tile_{self.tile_reduction_op}",
+            "with",
+        ]
+
+        return name_parts
+
+    def output(self):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
             model_name=self.embedding_model_name,
             **dict(self.embedding_model_args),
         )
 
-        name_parts = [
-            "__all__",
-            self.aux_name,
-            f"tile_{self.tile_reduction_op}",
-            "with",
-            emb_name,
-        ]
-
-        return name_parts
-
-    def output(self):
         name = ".".join(self.name_parts)
-        p = Path(self.data_path) / "embeddings" / "with_aux"
-        return utils.XArrayTarget(str(p / (name + ".nc")))
+        fn = f"{name}.nc"
+        p = (
+            Path(self.data_path)
+            / "embeddings"
+            / "with_aux"
+            / self.tiles_kind
+            / emb_name
+            / fn
+        )
+        return utils.XArrayTarget(str(p))
 
 
 @luigi.util.requires(AggregatedDatasetScenesAuxFieldWithEmbeddings)
@@ -289,6 +301,7 @@ class TransformedAggregatedDatasetScenesAuxFieldWithEmbeddings(
     def run(self):
         ds = self.input().open()
         ds["emb"] = self._apply_transform(da_emb=ds.emb)
+        Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
         ds.to_netcdf(self.output().path)
 
     @property
@@ -305,11 +318,24 @@ class TransformedAggregatedDatasetScenesAuxFieldWithEmbeddings(
             "__all__",
             self.aux_name,
             f"tile_{self.tile_reduction_op}",
-            "with",
-            self.transform_name,
         ]
 
     def output(self):
+        emb_name = make_embedding_name(
+            kind=self.tiles_kind,
+            model_name=self.embedding_model_name,
+            **dict(self.embedding_model_args),
+        )
+
         name = ".".join(self.name_parts)
-        p = Path(self.data_path) / "embeddings" / "with_aux"
-        return utils.XArrayTarget(str(p / (name + ".nc")))
+        fn = f"{name}.nc"
+        p = (
+            Path(self.data_path)
+            / "embeddings"
+            / "with_aux"
+            / self.tiles_kind
+            / emb_name
+            / f"transformed.with.{self.transform_name}"
+            / fn
+        )
+        return utils.XArrayTarget(str(p))

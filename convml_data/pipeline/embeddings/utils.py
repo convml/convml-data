@@ -45,7 +45,8 @@ def symlink_external_models(data_path, model_filename, external_data_path):
     model_src_path = (
         Path(prefix) / data_path_rel / "embeddings" / "models" / model_filename
     )
-    assert model_src_path.exists()
+    # if not model_src_path.exists():
+    # raise Exception(f"Couldn't find model in `{model_src_path}` to symlink")
 
     models_dst_path = Path(prefix) / external_data_path_rel / "embeddings" / "models"
     models_dst_path.mkdir(exist_ok=True, parents=True)
