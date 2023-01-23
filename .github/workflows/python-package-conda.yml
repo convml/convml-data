@@ -18,7 +18,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
-          mamba-version: "*"
+          miniforge-variant: Mambaforge
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: convml_data
@@ -29,6 +29,12 @@ jobs:
           python -m pip install .
           python -m pip install ".[sattiles]"
           python -m pip install ".[dev]"
+
+      - uses: extractions/netrc@v1
+        with:
+          machine: urs.earthdata.nasa.gov
+          username: ${{ secrets.EARTHDATA_USERNAME }}
+          password: ${{ secrets.EARTHDATA_PASSWORD }}
 
       - name: Test with pytest
         run: |

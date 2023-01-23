@@ -48,22 +48,25 @@ aux_products:
     source: era5
     product: t
     image_function: null
-  boundary_layer_windspeed:
-    source: era5
-    product: bl_umag
-    image_function: null
-  cloud_layer_windspeed:
-    source: era5
-    product: cl_umag
-    image_function: null
   boundary_layer_mean_total_moisture:
     source: era5
     product: bl_qmean
-    image_function: null
   cloud_layer_mean_total_moisture:
     source: era5
     product: cl_qmean
-    image_function: null
+  boundary_layer_windspeed:
+    source: era5
+    product: bl_umag
+  cloud_layer_windspeed:
+    source: era5
+    product: cl_umag
+  boundary_layer_mean_wind_direction:
+    source: era5
+    product: bl_wind_direction
+  cloud_layer_mean_wind_direction:
+    source: era5
+    product: cl_wind_direction
+  # radiation obs
   toa_reflected_shortwave_ceres:
     source: ceres
     product: goes16n__broadband_shortwave_flux
@@ -87,6 +90,21 @@ aux_products:
     product: user_function
     input: [bt_11, bt_14, bt_15]
     image_function: ir_shallow_clouds_ch11_ch14_ch15_v1__img
+  ceres_syn1deg_clear_sky_toa_lw_flux:
+    source: ceres_syn1deg_modis
+    product: observed_clear_sky_toa_lw_flux
+  ceres_syn1deg_clear_sky_toa_sw_flux:
+    source: ceres_syn1deg_modis
+    product: observed_clear_sky_toa_sw_flux
+  ceres_syn1deg_sw_cloud_radiative_effect:
+    source: ceres_syn1deg_modis
+    product: toa_sw_cre
+  ceres_syn1deg_lw_cloud_radiative_effect:
+    source: ceres_syn1deg_modis
+    product: toa_lw_cre
+  ceres_syn1deg_net_cloud_radiative_effect:
+    source: ceres_syn1deg_modis
+    product: toa_net_cre
 
 
 time:

@@ -116,6 +116,34 @@ def _calc_cl_umag(da_u, da_v):
     return _calc_layer_umag(da_u=da_u, da_v=da_v, layer_name="cloud_layer")
 
 
+def _calc_layer_wind_direction(da_u, da_v, layer_name):
+    ds = xr.merge([da_u, da_v])
+    if layer_name == "boundary_layer":
+        kwargs = levels_bl
+    elif layer_name == "cloud_layer":
+        kwargs = levels_cl
+    else:
+        raise NotImplementedError(layer_name)
+
+    ds_layer = ds.sel(**kwargs)
+    ds_layer_mean = ds_layer.mean(dim="level", keep_attrs=True)
+    da_layer_mean_wind_direction = mpcalc.wind_direction(
+        u=ds_layer_mean.u, v=ds_layer_mean.v
+    )
+    da_layer_mean_wind_direction.attrs[
+        "long_name"
+    ] = f"{layer_name} ({kwargs['level'].start} - {kwargs['level'].stop}) mean wind direction"
+    return da_layer_mean_wind_direction
+
+
+def _calc_bl_wind_direction(da_u, da_v):
+    return _calc_layer_wind_direction(da_u=da_u, da_v=da_v, layer_name="boundary_layer")
+
+
+def _calc_cl_wind_direction(da_u, da_v):
+    return _calc_layer_wind_direction(da_u=da_u, da_v=da_v, layer_name="cloud_layer")
+
+
 def _calc_column_total_precipitable_water(da_q, da_p):
     da_dp = da_p.differentiate(coord="level")
     da_tpw = 1.0 / 9.8 * (da_q * da_dp).sum(dim="level")
@@ -126,6 +154,8 @@ def _calc_column_total_precipitable_water(da_q, da_p):
 
 DERIVED_VARIABLES = dict(
     umag=(_calc_umag, ["u", "v"]),
+    bl_wind_direction=(_calc_bl_wind_direction, ["u", "v"]),
+    cl_wind_direction=(_calc_cl_wind_direction, ["u", "v"]),
     alt_p=(_calc_alt_p, ["q", "t", "z", "lnsp"]),
     alt=(_calc_alt, ["alt_p"]),
     p=(_calc_pressure, ["alt_p"]),
