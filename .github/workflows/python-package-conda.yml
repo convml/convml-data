@@ -36,6 +36,9 @@ jobs:
           username: ${{ secrets.EARTHDATA_USERNAME }}
           password: ${{ secrets.EARTHDATA_PASSWORD }}
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v2
+
       - name: Test with pytest
         run: |
           python -m pytest
