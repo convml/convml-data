@@ -30,10 +30,10 @@ jobs:
           python -m pip install ".[sattiles]"
           python -m pip install ".[dev]"
 
-      - uses: extractions/netrc@v1
+      - uses: little-core-labs/netrc-creds@master
         with:
-          machine: urs.earthdata.nasa.gov
-          username: ${{ secrets.EARTHDATA_USERNAME }}
+          machine: some.other.api.com
+          login: ${{ secrets.EARTHDATA_USERNAME }}
           password: ${{ secrets.EARTHDATA_PASSWORD }}
 
       - name: Setup tmate session
