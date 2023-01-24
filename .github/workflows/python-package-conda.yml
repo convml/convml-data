@@ -36,12 +36,11 @@ jobs:
           login: ${{ secrets.EARTHDATA_USERNAME }}
           password: ${{ secrets.EARTHDATA_PASSWORD }}
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v2
+      - shell: bash
         env:
-          machine: some.other.api.com
-          login: ${{ secrets.EARTHDATA_USERNAME }}
-          password: ${{ secrets.EARTHDATA_PASSWORD }}
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
+        run: |
+          echo "earthdata: $EARTHDATA_USERNAME"
 
       - name: Test with pytest
         run: |
