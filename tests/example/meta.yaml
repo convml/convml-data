@@ -3,10 +3,10 @@ product: truecolor_rgb
 
 aux_products:
   cloud_top_temperature:
-    source: ceres
+    source: ceres_geo
     product: goes16n__cloud_top_temperature
   total_net_radiation:
-    source: ceres
+    source: ceres_geo
     product: goes16n__approximate_toa_net_radiation_flux
   sea_surface_temperature:
     source: era5
@@ -64,8 +64,8 @@ aux_products:
     source: era5
     product: cl_qmean
     image_function: null
-  toa_reflected_shortwave_ceres:
-    source: ceres
+  toa_reflected_shortwave_ceres_geo:
+    source: ceres_geo
     product: goes16n__broadband_shortwave_flux
   toa_reflected_shortwave_goes:
     source: goes16
@@ -76,11 +76,11 @@ aux_products:
   total_precipitable_water_era5:
     source: era5
     product: tpw
-  liquidice_water_path_ceres:
-    source: ceres
+  liquidice_water_path_ceres_geo:
+    source: ceres_geo
     product: goes16n__cloud_lwp_iwp
-  cloud_phase_ceres:
-    source: ceres
+  cloud_phase_ceres_geo:
+    source: ceres_geo
     product: goes16n__cloud_phase
   ir_shallow_clouds_ch11_ch14_ch15_v1:
     source: goes16
