@@ -39,7 +39,7 @@ jobs:
 
       - uses: little-core-labs/netrc-creds@master
         with:
-          machine: some.other.api.com
+          machine: urs.earthdata.nasa.gov
           login: ${{ secrets.EARTHDATA_USERNAME }}
           password: ${{ secrets.EARTHDATA_PASSWORD }}
 
