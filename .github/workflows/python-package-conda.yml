@@ -16,12 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - shell: bash
-        run: |
-          echo "earthdata: $EARTHDATA_USERNAME $PYPI_TOKEN"
-        env:
-          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
