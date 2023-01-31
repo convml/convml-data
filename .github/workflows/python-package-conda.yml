@@ -9,10 +9,12 @@ jobs:
         #os: [ubuntu-latest, windows-latest]
         os: [ubuntu-latest]
         python-version: [3.8, 3.9]
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }} ${{ secrets.EARTHDATA_USERNAME }}
     defaults:
       run:
         shell: bash -l {0}
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
     steps:
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
@@ -37,8 +39,6 @@ jobs:
           password: ${{ secrets.EARTHDATA_PASSWORD }}
 
       - shell: bash
-        env:
-          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
         run: |
           echo "earthdata: $EARTHDATA_USERNAME"
 
