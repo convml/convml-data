@@ -1,5 +1,5 @@
 name: Python Package using Conda
-on: [push, pull_request_target]
+on: [push, pull_request]
 
 jobs:
   build:
@@ -10,9 +10,9 @@ jobs:
         os: [ubuntu-latest]
         python-version: [3.8, 3.9]
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
-    #defaults:
-      #run:
-        #shell: bash -l {0}
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
       - uses: actions/checkout@v2
 
