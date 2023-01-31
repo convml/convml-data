@@ -13,14 +13,14 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-        env:
-          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
     steps:
       - uses: actions/checkout@v2
 
       - shell: bash
         run: |
           echo "earthdata: $EARTHDATA_USERNAME"
+        env:
+          EARTHDATA_USERNAME: ${{ secrets.EARTHDATA_USERNAME }}
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
