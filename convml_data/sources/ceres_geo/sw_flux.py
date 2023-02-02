@@ -60,7 +60,7 @@ def calc_reflected_sw_from_albedo(da_sw_albedo, dt_utc):
     return da_sw_reflected
 
 
-def calc_toa_total_outgoing_flux(da_sw_albedo, da_lw_flux, dt_utc):
+def calc_toa_net_flux(da_sw_albedo, da_lw_flux, dt_utc):
     assert da_sw_albedo.units == "%"
 
     da_sw_rad = calc_toa_incoming_sw_flux(
@@ -74,6 +74,5 @@ def calc_toa_total_outgoing_flux(da_sw_albedo, da_lw_flux, dt_utc):
 
     da_toa_net_flux = da_toa_sw_incoming - da_toa_lw_outgoing
     da_toa_net_flux.attrs["units"] = "W m-2"
-    da_toa_net_flux.attrs["long_name"] = "approximate toa total outgoing radiation flux"
-    da_toa_net_flux.name = "approximate_toa_total_outgoing_radiation_flux"
+    da_toa_net_flux.attrs["long_name"] = "approximate incoming toa net radiation flux"
     return da_toa_net_flux
