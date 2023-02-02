@@ -23,7 +23,7 @@ class QueryForData(luigi.Task):
                 f"Couldn't parse data-type `{self.data_type}`, please make sure"
                 " it has the format `{satellite}__{product_name}`"
             ) from ex
-        filenames = list(
+        filenames = dict(
             get_available_files(
                 t_start=self.t_start, t_end=self.t_end, satellite=satellite
             )

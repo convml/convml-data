@@ -221,24 +221,6 @@ def get_user_function_source_input_names(source_name, product_meta):
     return input_names
 
 
-def get_time_for_filename(source_name, filename):
-    """Return the timestamp for a given source data file"""
-    if source_name == "goes16":
-        t = GOES16Query.get_time(filename=filename)
-    elif source_name == "LES":
-        t = FindLESFiles.get_time(filename=filename)
-    elif source_name == "ceres_geo":
-        t = ceres_geo.pipeline.QueryForData.get_time(filename=filename)
-    elif source_name == "ceres_syn1deg_modis":
-        t = ceres_syn1deg_modis.pipeline.QueryForData.get_time(filename=filename)
-    elif source_name == "era5":
-        t = era5.pipeline.ERA5Query.get_time(filename=filename)
-    else:
-        raise NotImplementedError(source_name)
-
-    return t
-
-
 def _extract_scene_data_for_user_function(task_input, product_meta, bbox_crop):
     das = []
 

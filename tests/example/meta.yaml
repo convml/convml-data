@@ -2,7 +2,7 @@ source: goes16
 product: truecolor_rgb
 
 aux_products:
-  cloud_top_temperature:
+  cloud_top_temperature_ceres_geo:
     source: ceres_geo
     product: goes16n__cloud_top_temperature
   total_net_radiation:

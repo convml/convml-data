@@ -49,7 +49,7 @@ def get_available_files(t_start, t_end, product):
 
     t = t0
     while t < t_end:
-        yield str(_make_filepath(t=t, var=product))
+        yield (t, str(_make_filepath(t=t, var=product)))
         t += datetime.timedelta(hours=1)
 
 
@@ -76,7 +76,7 @@ class ERA5Query(luigi.Task):
             raise Exception(
                 f"{self.data_type} is not one of the available source variables"
             )
-        filenames = list(
+        filenames = dict(
             get_available_files(
                 t_start=self.t_start, t_end=self.t_end, product=self.data_type
             )
