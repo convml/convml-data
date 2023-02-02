@@ -7,11 +7,24 @@ import pytest
 
 from convml_data import DataSource
 from convml_data.pipeline import GenerateRegriddedScenes, GenerateTiles
+from convml_data.sources.ceres_syn1deg_modis.earthaccess_auth import auth as ea_auth
 
 # from convml_data.pipeline.embeddings.sampling import DatasetScenesTileEmbeddings
 
 EXAMPLE_FILEPATH = str(Path(__file__).parent / "example")
 HAS_JASMIN_ACCESS = socket.getfqdn() in ["thixo"]
+
+ea = ea_auth.Auth().login(strategy="netrc")
+HAS_EARTHDATA_ACCESS = ea_auth.Auth().login(strategy="netrc").authenticated
+
+
+def _data_source_available(source_name):
+    if source_name == "era5" and not HAS_JASMIN_ACCESS:
+        return False
+    elif source_name == "ceres_syn1deg_modis" and not HAS_EARTHDATA_ACCESS:
+        return False
+
+    return True
 
 
 def test_make_triplets():
@@ -26,10 +39,8 @@ def test_make_triplets():
 
     aux_products = list(datasource.aux_products.keys())
     for aux_product_name in aux_products:
-        if (
-            datasource.aux_products[aux_product_name]["source"] == "era5"
-            and not HAS_JASMIN_ACCESS
-        ):
+        product_source = datasource.aux_products[aux_product_name]["source"]
+        if not _data_source_available(product_source):
             continue
 
         tasks.append(
@@ -49,7 +60,8 @@ def _parse_example_aux_products():
     aux_product_names = []
 
     for aux_product_name, kwargs in datasource.aux_products.items():
-        if kwargs["source"] == "era5" and not HAS_JASMIN_ACCESS:
+        product_source = datasource.aux_products[aux_product_name]["source"]
+        if not _data_source_available(product_source):
             continue
 
         aux_product_names.append(aux_product_name)

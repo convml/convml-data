@@ -15,6 +15,7 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v2
+
       - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.python-version }}
@@ -29,6 +30,12 @@ jobs:
           python -m pip install .
           python -m pip install ".[sattiles]"
           python -m pip install ".[dev]"
+
+      - uses: little-core-labs/netrc-creds@master
+        with:
+          machine: urs.earthdata.nasa.gov
+          login: ${{ secrets.EARTHDATA_USERNAME }}
+          password: ${{ secrets.EARTHDATA_PASSWORD }}
 
       - name: Test with pytest
         run: |
