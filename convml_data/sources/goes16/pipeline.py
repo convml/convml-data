@@ -48,9 +48,12 @@ class GOES16Query(luigi.Task):
         filenames = cli.query(
             time=self.time, region="F", debug=self.debug, dt_max=self.dt_max, **kws
         )
+        times_and_files = {
+            self.parse_filename(fn)["start_time"]: fn for fn in filenames
+        }
 
         Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
-        self.output().write(filenames)
+        self.output().write(times_and_files)
 
     def output(self):
         if self.channel is not None:
