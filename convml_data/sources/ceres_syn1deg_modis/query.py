@@ -34,4 +34,4 @@ def get_available_files(t_start, t_end):
             for time in times:
                 if t_start <= time <= t_end:
                     filename = url.split("/")[-1]
-                    yield filename
+                    yield (time, filename)

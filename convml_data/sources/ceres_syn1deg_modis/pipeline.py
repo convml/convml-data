@@ -16,7 +16,7 @@ class QueryForData(luigi.Task):
     DB_NAME_FORMAT = "keys_{t_start:%Y%m%d%H%M}_{t_end:%Y%m%d%H%M}"
 
     def run(self):
-        filenames = list(get_available_files(t_start=self.t_start, t_end=self.t_end))
+        filenames = dict(get_available_files(t_start=self.t_start, t_end=self.t_end))
 
         Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
         self.output().write(filenames)

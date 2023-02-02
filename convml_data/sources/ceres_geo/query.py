@@ -49,5 +49,5 @@ def get_available_files(t_start, t_end, satellite):
     while t < t_end:
         fn = make_local_filename(time=t, satellite=satellite)
         if t.strftime(TIME_FORMAT) not in MISSING_TIMES.get(satellite, []):
-            yield fn
+            yield (t, fn)
         t += datetime.timedelta(hours=1)
