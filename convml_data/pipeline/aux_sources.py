@@ -148,6 +148,20 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
             product=self.product_name,
         )
 
+        # filter any files we don't want to use here
+        file_exclusions_all = self.data_source._meta.get("file_exclusions", {})
+        source_file_exclusions = file_exclusions_all.get(self.source_name, [])
+        if len(source_file_exclusions) > 0:
+            aux_scenes_by_time = {
+                dt: {
+                    var_name: filename
+                    for (var_name, filename) in scene_parts.items()
+                    if filename not in source_file_exclusions
+                }
+                for (dt, scene_parts) in aux_scenes_by_time.items()
+            }
+
+        # match the aux files by their timestamp to the scene ids
         product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
             aux_scenes_by_time=aux_scenes_by_time,
             scene_times=scene_times,

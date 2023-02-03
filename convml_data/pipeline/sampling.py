@@ -122,18 +122,30 @@ class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
 
         timestamp = parse_scene_id(self.scene_id)[1]
 
-        da_cropped = extract_variable(
-            task_input=task_input,
-            data_source=self.source_name,
-            product=self.product_name,
-            # the provided "domain" is used for cropping, but cropping
-            # isn't needed when the field to be extracted is derived from
-            # other fields ("required_extra_fields") as they will have been
-            # cropped already
-            domain=required_extra_fields is None and domain or None,
-            product_meta=self.product_meta,
-            timestamp=timestamp,
-        )
+        try:
+            da_cropped = extract_variable(
+                task_input=task_input,
+                data_source=self.source_name,
+                product=self.product_name,
+                # the provided "domain" is used for cropping, but cropping
+                # isn't needed when the field to be extracted is derived from
+                # other fields ("required_extra_fields") as they will have been
+                # cropped already
+                domain=required_extra_fields is None and domain or None,
+                product_meta=self.product_meta,
+                timestamp=timestamp,
+            )
+        except Exception as ex:
+            if isinstance(task_input, dict):
+                task_sources = {
+                    name: output.path for (name, output) in task_input.items()
+                }
+            else:
+                task_sources = task_input.path
+            raise Exception(
+                f"There was an issue extracting/cropping {self.product_name} from "
+                f"{self.source_name} using sources: {task_sources}"
+            ) from ex
 
         if "image" in self.output():
             img_cropped = self._create_image(da_scene=da_cropped)

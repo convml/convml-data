@@ -78,7 +78,7 @@ def create_scenes_from_input_queries(inputs, source_name, product):
             if not isinstance(files_by_time, dict):
                 raise Exception(
                     f"The query-result database for `{product}` is in the old format"
-                    " (without the timestamp for each file). Please delete `{input_part.path}`"
+                    f" (without the timestamp for each file). Please delete `{input_part.path}`"
                     " and rerun this task."
                 )
 
