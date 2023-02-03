@@ -60,7 +60,7 @@ def calc_reflected_sw_from_albedo(da_sw_albedo, dt_utc):
     return da_sw_reflected
 
 
-def calc_toa_net_flux(da_sw_albedo, da_lw_flux, dt_utc):
+def calc_toa_net_incoming_flux(da_sw_albedo, da_lw_flux, dt_utc):
     assert da_sw_albedo.units == "%"
 
     da_sw_rad = calc_toa_incoming_sw_flux(
