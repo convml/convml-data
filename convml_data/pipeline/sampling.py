@@ -15,7 +15,7 @@ from .aux_sources import (
     CheckForAuxiliaryFiles,
 )
 from .scene_images import SceneImageMixin
-from .scene_sources import GenerateSceneIDs
+from .scene_sources import GenerateSceneIDs, parse_scene_id
 from .utils import SceneBulkProcessingBaseTask
 
 
@@ -120,6 +120,8 @@ class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
         else:
             task_input = self.input()["data"]
 
+        timestamp = parse_scene_id(self.scene_id)[1]
+
         da_cropped = extract_variable(
             task_input=task_input,
             data_source=self.source_name,
@@ -130,6 +132,7 @@ class CropSceneSourceFiles(luigi.Task, AuxTaskMixin, SceneImageMixin):
             # cropped already
             domain=required_extra_fields is None and domain or None,
             product_meta=self.product_meta,
+            timestamp=timestamp,
         )
 
         if "image" in self.output():

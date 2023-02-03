@@ -360,7 +360,9 @@ def get_required_extra_fields(data_source, product):
     return None
 
 
-def extract_variable(task_input, data_source, product, product_meta={}, domain=None):
+def extract_variable(
+    task_input, data_source, product, timestamp, product_meta={}, domain=None
+):
     do_crop = domain is not None
 
     if product == "user_function":
@@ -399,9 +401,10 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
     elif data_source == "ceres_syn1deg_modis":
         var_name = product
         # CERES files have all products stored in a single file and so for all
-        # products there is just a single input
+        # products there is just a single input. There are multiple times in a
+        # single file though so we have to pass in the timestamp
         da = ceres_syn1deg_modis.extract_variable(
-            task_input=task_input[product], var_name=var_name
+            task_input=task_input[product], var_name=var_name, timestamp=timestamp
         )
     elif data_source == "goes16":
         do_crop = False

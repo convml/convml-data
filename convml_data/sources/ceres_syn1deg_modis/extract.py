@@ -5,9 +5,7 @@ import rioxarray as rxr
 from rasterio.errors import NotGeoreferencedWarning
 
 
-def extract_variable(task_input, var_name):
-    fn_modis = task_input.path
-
+def _extract_scene_dataset_from_hdf_file(fn_modis, timestamp):
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
         hdf_collection = rxr.open_rasterio(fn_modis)
@@ -41,22 +39,38 @@ def extract_variable(task_input, var_name):
     ds = ds.swap_dims(dict(band="time"))
     ds = ds.drop(["band", "spatial_ref"])
 
-    if var_name in ds.data_vars:
-        da = ds[var_name]
+    # NB: scene timestamp might not be exactly the same as the time of this
+    # dataset, but we're assuming here that we're selecting from a set of
+    # timestamps that are close enough (that these scene has been associated
+    # with this file previously)
+    ds_scene = ds.sel(time=timestamp, method="nearest")
+
+    return ds_scene
+
+
+def extract_variable(task_input, var_name, timestamp):
+    fn_modis = task_input.path
+
+    ds_scene = _extract_scene_dataset_from_hdf_file(
+        fn_modis=fn_modis, timestamp=timestamp
+    )
+
+    if var_name in ds_scene.data_vars:
+        da = ds_scene[var_name]
     elif var_name == "toa_sw_cre":
-        da = calc_toa_sw_cre(ds=ds)
+        da = calc_toa_sw_cre(ds=ds_scene)
     elif var_name == "toa_lw_cre":
-        da = calc_toa_lw_cre(ds=ds)
+        da = calc_toa_lw_cre(ds=ds_scene)
     elif var_name == "toa_net_cre":
-        da_toa_sw_cre = calc_toa_sw_cre(ds=ds)
-        da_toa_lw_cre = calc_toa_lw_cre(ds=ds)
+        da_toa_sw_cre = calc_toa_sw_cre(ds=ds_scene)
+        da_toa_lw_cre = calc_toa_lw_cre(ds=ds_scene)
         da = da_toa_sw_cre + da_toa_lw_cre
         da.attrs["units"] = da_toa_lw_cre.units
         da.attrs["long_name"] = "TOA NET CRE"
     else:
         raise Exception(
             f"Variable `{var_name}` not found in MODIS SYN1Deg dataset. "
-            f"Available variables are: {', '.join(ds.data_vars)}"
+            f"Available variables are: {', '.join(sorted(ds_scene.data_vars))}"
         )
 
     da = da.sortby("lat")
