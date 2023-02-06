@@ -142,24 +142,13 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
         product_input = inputs["product"]
 
         # create a mapping from aux_scene_time -> aux_scene_filename(s)
-        aux_scenes_by_time = create_scenes_from_input_queries(
-            inputs=product_input,
-            source_name=self.source_name,
-            product=self.product_name,
+        aux_scenes_by_time = self._filter_aux_times(
+            create_scenes_from_input_queries(
+                inputs=product_input,
+                source_name=self.source_name,
+                product=self.product_name,
+            )
         )
-
-        # filter any files we don't want to use here
-        file_exclusions_all = self.data_source._meta.get("file_exclusions", {})
-        source_file_exclusions = file_exclusions_all.get(self.source_name, [])
-        if len(source_file_exclusions) > 0:
-            aux_scenes_by_time = {
-                dt: {
-                    var_name: filename
-                    for (var_name, filename) in scene_parts.items()
-                    if filename not in source_file_exclusions
-                }
-                for (dt, scene_parts) in aux_scenes_by_time.items()
-            }
 
         # match the aux files by their timestamp to the scene ids
         product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
@@ -171,6 +160,27 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
         )
 
         self.output().write(product_fn_for_scenes)
+
+    def _filter_aux_times(self, aux_scenes_by_time):
+        # filter any files we don't want to use here
+
+        aux_scenes_by_time_filtered = {}
+
+        file_exclusions_all = self.data_source._meta.get("file_exclusions", {})
+        source_file_exclusions = file_exclusions_all.get(self.source_name, [])
+        if len(source_file_exclusions) > 0:
+            for (dt, scene_parts) in aux_scenes_by_time.items():
+                if any(
+                    [
+                        filename in source_file_exclusions
+                        for filename in scene_parts.values()
+                    ]
+                ):
+                    continue
+                else:
+                    aux_scenes_by_time_filtered[dt] = scene_parts
+
+        return aux_scenes_by_time_filtered
 
     def output(self):
         data_source = self.data_source
