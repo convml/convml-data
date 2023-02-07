@@ -38,7 +38,7 @@ class QueryForData(luigi.Task):
             t_start=self.t_start,
             t_end=self.t_end,
         )
-        return DBTarget(path=self.data_path, db_type="yaml", db_name=db_name)
+        return DBTarget(path=self.data_path, db_type=self.db_type, db_name=db_name)
 
     @staticmethod
     def get_time(filename):
