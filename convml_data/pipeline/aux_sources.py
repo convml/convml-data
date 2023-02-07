@@ -164,23 +164,18 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
     def _filter_aux_times(self, aux_scenes_by_time):
         # filter any files we don't want to use here
 
-        aux_scenes_by_time_filtered = {}
-
         file_exclusions_all = self.data_source._meta.get("file_exclusions", {})
         source_file_exclusions = file_exclusions_all.get(self.source_name, [])
         if len(source_file_exclusions) > 0:
-            for (dt, scene_parts) in aux_scenes_by_time.items():
+            for dt in list(aux_scenes_by_time.keys()):
+                scene_parts = aux_scenes_by_time[dt]
                 if any(
-                    [
-                        filename in source_file_exclusions
-                        for filename in scene_parts.values()
-                    ]
+                    filename in source_file_exclusions
+                    for filename in scene_parts.values()
                 ):
-                    continue
-                else:
-                    aux_scenes_by_time_filtered[dt] = scene_parts
+                    del aux_scenes_by_time[dt]
 
-        return aux_scenes_by_time_filtered
+        return aux_scenes_by_time
 
     def output(self):
         data_source = self.data_source
