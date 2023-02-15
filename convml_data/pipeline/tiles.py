@@ -468,7 +468,7 @@ class GenerateTiles(luigi.Task):
 
         return tasks
 
-    def run(self):
+    def generate_runtime_tasks(self):
         if self.tiles_kind in ["triplets", "trajectories"]:
             # exclude scene ids without a tile
             tiles_per_scene = self.input()["tiles_per_scene"].open()
@@ -496,4 +496,7 @@ class GenerateTiles(luigi.Task):
                 data_path=self.data_path,
             )
 
-        yield tasks_tiles
+        return tasks_tiles
+
+    def run(self):
+        yield self.generate_runtime_tasks()
