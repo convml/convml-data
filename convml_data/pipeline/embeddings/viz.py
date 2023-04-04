@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import luigi
+import matplotlib_aximgcache as mpl_aic
 from convml_tt.interpretation.plots import manifold2d as manifold2d_plot
 
 from .sampling import (
@@ -14,11 +15,12 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
     data_path = luigi.Parameter(default=".")
     dataset_stage = luigi.Parameter()
 
-    tile_size = luigi.OptionalFloatParameter(default=0.05)
-    dl_sampling = luigi.OptionalFloatParameter(default=0.1)
+    tile_size = luigi.OptionalFloatParameter(default=0.04)
+    dl_sampling = luigi.OptionalFloatParameter(default=0.08)
 
     model_name = luigi.Parameter()
     transform_method = luigi.Parameter()
+    cache_ax_image = luigi.BoolParameter(default=False)
 
     def requires(self):
         kwargs = dict(
@@ -61,14 +63,22 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
             .sortby("tile_id")
         )
 
-        fig, _, _ = manifold2d_plot.make_manifold_reference_plot(
+        fig, ax, _ = manifold2d_plot.make_manifold_reference_plot(
             da_embs=da_triplet_embs,
             method=self.transform_method,
             da_embs_manifold=da_anchor_manifold_embs,
             tile_size=self.tile_size,
             dl=self.dl_sampling,
         )
-        fig.savefig(self.output().path)
+        fig.set_dpi(300)
+
+        if self.cache_ax_image:
+            fp_aximgcache = Path(self.output()["aximgcache"].path)
+
+            if not fp_aximgcache.exists():
+                mpl_aic.save_ax_to_image(ax=ax, fpath=fp_aximgcache)
+
+        fig.savefig(self.output()["image"].path)
 
     def output(self):
         emb_name = make_embedding_name(
@@ -79,4 +89,14 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
 
         fn = ".".join(name_parts)
 
-        return luigi.LocalTarget(str(Path(self.data_path) / fn))
+        outputs = dict(image=luigi.LocalTarget(str(Path(self.data_path) / fn)))
+
+        if not self.cache_ax_image:
+            name_parts_aximgcache = list(name_parts)
+            name_parts_aximgcache.insert(3, "aximgcache")
+            fn_aximgcache = ".".join(name_parts_aximgcache)
+            outputs["aximgcache"] = luigi.LocalTarget(
+                str(Path(self.data_path) / fn_aximgcache)
+            )
+
+        return outputs

@@ -80,6 +80,25 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
             return reduction_op
 
+        elif str(self.tile_reduction_op).endswith("__percentile"):
+            q = int(str(self.tile_reduction_op).replace("__percentile", ""))
+
+            def reduction_op(da_tile):
+                try:
+                    suffix = ["st", "nd", "rd"][31 % 10 - 1]
+                except IndexError:
+                    suffix = "th"
+
+                long_name = f"{q}{suffix} tile percentile of {da_tile.long_name}"
+                value = np.percentile(da_tile, q=q)
+                units = da_tile.units
+                da_tile_reduced = xr.DataArray(
+                    value, attrs=dict(long_name=long_name, units=units), name=var_name
+                )
+                return da_tile_reduced
+
+            return reduction_op
+
         elif "__" in str(self.tile_reduction_op):
             # e.g. `cloud_metrics__mask__iorg_objects` becomes `cloudmetrics.mask.iorg_objects(...)`
             op_parts = self.tile_reduction_op.split("__")
@@ -129,20 +148,22 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
             for t_id in da_embs[concat_dim].values:
                 da_tile_aux = aux_fields[t_id]["data"].open()
+                if "units" not in da_tile_aux.attrs:
+                    da_tile_aux.close()
+                    Path(aux_fields[t_id]["data"].path).unlink()
+                    continue
+
                 da_tile_aux_value = reduction_op(da_tile_aux)
                 assert "long_name" in da_tile_aux_value.attrs
                 assert "units" in da_tile_aux_value.attrs
                 da_tile_aux_value[concat_dim] = t_id
                 values.append(da_tile_aux_value)
 
-            da_aux_values = xr.concat(values, dim=concat_dim)
+            if len(values) == 0:
+                raise Exception(42)
 
-            if (
-                "t" in da_embs.coords
-                and "t" in da_aux_values.coords
-                and not (da_embs.t == da_aux_values.t).all()
-            ):
-                da_embs = da_embs.rename(t="t_embs")
+            da_aux_values = xr.concat(values, dim=concat_dim)
+            da_embs = da_embs.rename(t="t_embs")
 
             ds = xr.merge([da_embs, da_aux_values])
 
@@ -249,7 +270,10 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
             ds_scene["scene_id"] = scene_id
             datasets.append(ds_scene)
 
-        ds = xr.concat(datasets, dim=concat_dim)
+        import ipdb
+
+        with ipdb.launch_ipdb_on_exception():
+            ds = xr.concat(datasets, dim=concat_dim)
 
         if "stage" in ds.data_vars:
             ds = ds.set_coords(["stage", "scene_id"])

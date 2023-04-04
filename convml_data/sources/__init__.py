@@ -433,6 +433,9 @@ def extract_variable(
     else:
         raise NotImplementedError(data_source)
 
+    assert "units" in da.attrs
+    assert "long_name" in da.attrs
+
     if do_crop:
         da_cropped = rc.crop_field_to_domain(domain=domain, da=da)
         return da_cropped

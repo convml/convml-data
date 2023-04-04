@@ -150,14 +150,17 @@ class CheckForAuxiliaryFiles(luigi.Task, AuxTaskMixin):
             )
         )
 
-        # match the aux files by their timestamp to the scene ids
-        product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
-            aux_scenes_by_time=aux_scenes_by_time,
-            scene_times=scene_times,
-            scene_ids=scene_ids,
-            dt_aux=self.dt_aux,
-            strategy=self.product_meta["scene_mapping_strategy"],
-        )
+        if len(aux_scenes_by_time) == 0:
+            product_fn_for_scenes = {}
+        else:
+            # match the aux files by their timestamp to the scene ids
+            product_fn_for_scenes = _match_each_aux_time_to_scene_ids(
+                aux_scenes_by_time=aux_scenes_by_time,
+                scene_times=scene_times,
+                scene_ids=scene_ids,
+                dt_aux=self.dt_aux,
+                strategy=self.product_meta["scene_mapping_strategy"],
+            )
 
         self.output().write(product_fn_for_scenes)
 
