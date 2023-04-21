@@ -89,7 +89,7 @@ def extract_variable(task_input, var_name, timestamp):
     def _extract_var(v):
         da = read_var_as_dataarray(fh=fh, var_name=v, make_time_coord=True)
         da = da.rename(dict(latitude="lat", longitude="lon"))
-        return da.sel(time=timestamp)
+        return da.sel(time=timestamp, method="nearest", tolerance="30m")
 
     all_var_names = get_vars(fh)
 

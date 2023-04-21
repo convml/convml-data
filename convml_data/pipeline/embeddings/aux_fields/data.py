@@ -102,6 +102,12 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
         elif "__" in str(self.tile_reduction_op):
             # e.g. `cloud_metrics__mask__iorg_objects` becomes `cloudmetrics.mask.iorg_objects(...)`
             op_parts = self.tile_reduction_op.split("__")
+
+            fillna_with_zeros = False
+            if op_parts[0] == "nanzerofill":
+                fillna_with_zeros = True
+                op_parts = op_parts[1:]
+
             module_name = ".".join(op_parts[:-1])
             function_name = op_parts[-1]
             module = importlib.import_module(module_name)
@@ -116,12 +122,20 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 kwargs["periodic_domain"] = False
 
             def reduction_op(da_tile):
-                value = op_fn(da_tile.values, **kwargs)
+                tile_values = da_tile.values
+                if fillna_with_zeros:
+                    tile_values = np.nan_to_num(tile_values, nan=0.0)
+
+                agg_value = op_fn(tile_values, **kwargs)
                 long_name = f"{op_desc} on {da_tile.long_name}"
+                if fillna_with_zeros:
+                    long_name += " (nan-zero-filled)"
                 # I think most metrics are dimensionless
                 units = "1"
                 da_tile_reduced = xr.DataArray(
-                    value, attrs=dict(long_name=long_name, units=units), name=var_name
+                    agg_value,
+                    attrs=dict(long_name=long_name, units=units),
+                    name=var_name,
                 )
                 return da_tile_reduced
 
