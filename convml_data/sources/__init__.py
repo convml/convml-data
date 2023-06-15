@@ -294,6 +294,8 @@ def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
         da = goes16.satpy_rgb.load_rgb_files_and_get_composite_da(
             scene_fns=scene_fns, bbox_crop=bbox_crop
         )
+        # need to set a dimension, we'll just say RGB is dimensionless for now
+        da.attrs["units"] = "1"
     else:
         try:
             channel_number, channel_prefix = goes16.parse_channel_shorthand(
