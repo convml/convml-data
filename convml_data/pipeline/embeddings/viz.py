@@ -15,8 +15,7 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
     data_path = luigi.Parameter(default=".")
     dataset_stage = luigi.Parameter()
 
-    tile_size = luigi.OptionalFloatParameter(default=0.04)
-    dl_sampling = luigi.OptionalFloatParameter(default=0.08)
+    plot_kwargs = luigi.DictParameter(default={})
 
     model_name = luigi.Parameter()
     transform_method = luigi.Parameter()
@@ -67,8 +66,7 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
             da_embs=da_triplet_embs,
             method=self.transform_method,
             da_embs_manifold=da_anchor_manifold_embs,
-            tile_size=self.tile_size,
-            dl=self.dl_sampling,
+            **self.plot_kwargs,
         )
         fig.set_dpi(300)
 
