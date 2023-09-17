@@ -13,4 +13,11 @@ def extract_variable(task_input, var_name):
         file_info = parse_filename(Path(task_input.path).name)
         ds["time"] = file_info["time"]
         da = compute_derived_variable(ds=ds, var_name=var_name)
+
+    if var_name.endswith("cloud_visible_optical_depth"):
+        # XXX: CERES SatCORPS is missing the "units" attribute for the cloud
+        # visible optical depth. It is dimensionless and so we just set it
+        # here.
+        da.attrs["units"] = "1"
+
     return da

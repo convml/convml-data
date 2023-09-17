@@ -112,6 +112,4 @@ class FindLESFiles(luigi.Task):
         self.output().write(files_by_timestep)
 
     def output(self):
-        return DBTarget(
-            path=str(self.data_path), db_name="files", db_type=self.data_source.db_type
-        )
+        return DBTarget(path=str(self.data_path), db_name="files", db_type="yaml")

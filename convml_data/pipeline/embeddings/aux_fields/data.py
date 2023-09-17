@@ -15,6 +15,7 @@ import inspect
 from pathlib import Path
 
 import luigi
+import luigi.util
 import numpy as np
 import xarray as xr
 
@@ -35,7 +36,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    embedding_model_path = luigi.Parameter()
+    embedding_model_name = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
@@ -59,7 +60,7 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
             data_path=self.data_path,
             scene_id=self.scene_id,
             tiles_kind=self.tiles_kind,
-            model_path=self.embedding_model_path,
+            model_name=self.embedding_model_name,
             model_args=self.embedding_model_args,
         )
         return tasks
@@ -79,9 +80,34 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
             return reduction_op
 
+        elif str(self.tile_reduction_op).endswith("__percentile"):
+            q = int(str(self.tile_reduction_op).replace("__percentile", ""))
+
+            def reduction_op(da_tile):
+                try:
+                    suffix = ["st", "nd", "rd"][31 % 10 - 1]
+                except IndexError:
+                    suffix = "th"
+
+                long_name = f"{q}{suffix} tile percentile of {da_tile.long_name}"
+                value = np.percentile(da_tile, q=q)
+                units = da_tile.units
+                da_tile_reduced = xr.DataArray(
+                    value, attrs=dict(long_name=long_name, units=units), name=var_name
+                )
+                return da_tile_reduced
+
+            return reduction_op
+
         elif "__" in str(self.tile_reduction_op):
             # e.g. `cloud_metrics__mask__iorg_objects` becomes `cloudmetrics.mask.iorg_objects(...)`
             op_parts = self.tile_reduction_op.split("__")
+
+            fillna_with_zeros = False
+            if op_parts[0] == "nanzerofill":
+                fillna_with_zeros = True
+                op_parts = op_parts[1:]
+
             module_name = ".".join(op_parts[:-1])
             function_name = op_parts[-1]
             module = importlib.import_module(module_name)
@@ -96,12 +122,20 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
                 kwargs["periodic_domain"] = False
 
             def reduction_op(da_tile):
-                value = op_fn(da_tile.values, **kwargs)
+                tile_values = da_tile.values
+                if fillna_with_zeros:
+                    tile_values = np.nan_to_num(tile_values, nan=0.0)
+
+                agg_value = op_fn(tile_values, **kwargs)
                 long_name = f"{op_desc} on {da_tile.long_name}"
+                if fillna_with_zeros:
+                    long_name += " (nan-zero-filled)"
                 # I think most metrics are dimensionless
                 units = "1"
                 da_tile_reduced = xr.DataArray(
-                    value, attrs=dict(long_name=long_name, units=units), name=var_name
+                    agg_value,
+                    attrs=dict(long_name=long_name, units=units),
+                    name=var_name,
                 )
                 return da_tile_reduced
 
@@ -128,20 +162,22 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
 
             for t_id in da_embs[concat_dim].values:
                 da_tile_aux = aux_fields[t_id]["data"].open()
+                if "units" not in da_tile_aux.attrs:
+                    da_tile_aux.close()
+                    Path(aux_fields[t_id]["data"].path).unlink()
+                    continue
+
                 da_tile_aux_value = reduction_op(da_tile_aux)
                 assert "long_name" in da_tile_aux_value.attrs
                 assert "units" in da_tile_aux_value.attrs
                 da_tile_aux_value[concat_dim] = t_id
                 values.append(da_tile_aux_value)
 
-            da_aux_values = xr.concat(values, dim=concat_dim)
+            if len(values) == 0:
+                raise Exception(42)
 
-            if (
-                "t" in da_embs.coords
-                and "t" in da_aux_values.coords
-                and not (da_embs.t == da_aux_values.t).all()
-            ):
-                da_embs = da_embs.rename(t="t_embs")
+            da_aux_values = xr.concat(values, dim=concat_dim)
+            da_embs = da_embs.rename(t="t_embs")
 
             ds = xr.merge([da_embs, da_aux_values])
 
@@ -151,21 +187,26 @@ class SceneAuxFieldWithEmbeddings(luigi.Task):
     def output(self):
         emb_name = make_embedding_name(
             kind=self.tiles_kind,
-            model_path=self.embedding_model_path,
+            model_name=self.embedding_model_name,
             **dict(self.embedding_model_args),
         )
 
         name_parts = [
             self.scene_id,
             self.aux_name,
-            "by",
-            emb_name,
             f"tile_{self.tile_reduction_op}",
         ]
 
         fn = ".".join(name_parts) + ".nc"
 
-        p = Path(self.data_path) / "embeddings" / "with_aux" / self.tiles_kind / fn
+        p = (
+            Path(self.data_path)
+            / "embeddings"
+            / "with_aux"
+            / self.tiles_kind
+            / emb_name
+            / fn
+        )
         return utils.XArrayTarget(str(p))
 
 
@@ -176,7 +217,7 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
     aux_name = luigi.OptionalParameter()
     tiles_kind = luigi.Parameter()
 
-    embedding_model_path = luigi.Parameter()
+    embedding_model_name = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
@@ -187,7 +228,7 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
         return dict(
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            embedding_model_path=self.embedding_model_path,
+            embedding_model_name=self.embedding_model_name,
             embedding_model_args=self.embedding_model_args,
             tile_reduction_op=self.tile_reduction_op,
         )
@@ -196,18 +237,16 @@ class DatasetScenesAuxFieldWithEmbeddings(SceneBulkProcessingBaseTask):
         return dict(aux_name=self.aux_name)
 
 
-class AggregatedDatasetScenesAuxFieldWithEmbeddings(
-    luigi.Task, _AggregatedTileEmbeddingsTransformMixin
-):
+class AggregatedDatasetScenesAuxFieldWithEmbeddings(luigi.Task):
     """
     Combine across all scenes in a dataset the embeddings and aux-field values
-    into a single file. Also, optionally apply an embedding transform
+    into a single file.
     """
 
     aux_name = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    embedding_model_path = luigi.Parameter()
+    embedding_model_name = luigi.Parameter()
     embedding_model_args = luigi.DictParameter(default={})
 
     data_path = luigi.Parameter(default=".")
@@ -218,48 +257,89 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             data_path=self.data_path,
             aux_name=self.aux_name,
             tiles_kind=self.tiles_kind,
-            embedding_model_path=self.embedding_model_path,
+            embedding_model_name=self.embedding_model_name,
             embedding_model_args=self.embedding_model_args,
             tile_reduction_op=self.tile_reduction_op,
         )
-        if self.embedding_transform is None:
-            return DatasetScenesAuxFieldWithEmbeddings(**kwargs)
 
-        return AggregatedDatasetScenesAuxFieldWithEmbeddings(**kwargs)
+        return DatasetScenesAuxFieldWithEmbeddings(**kwargs)
 
     def run(self):
-        if self.embedding_transform is None:
-            datasets = []
-            if self.tiles_kind in ["trajectories", "rect-slidingwindow"]:
-                concat_dim = "tile_id"
-            elif self.tiles_kind == "triplets":
-                concat_dim = "triplet_tile_id"
-            else:
-                raise NotImplementedError(self.tiles_kind)
+        emb_input = self.input()
 
-            for scene_id, inp in self.input().items():
-                ds_scene = inp.open()
-                if len(ds_scene.data_vars) == 0:
-                    # no tiles in this scene
-                    continue
+        datasets = []
+        if self.tiles_kind in ["trajectories", "rect-slidingwindow"]:
+            concat_dim = "tile_id"
+        elif self.tiles_kind == "triplets":
+            concat_dim = "triplet_tile_id"
+        else:
+            raise NotImplementedError(self.tiles_kind)
 
-                ds_scene["scene_id"] = scene_id
-                datasets.append(ds_scene)
+        for scene_id, inp in emb_input.items():
+            ds_scene = inp.open()
+            if len(ds_scene.data_vars) == 0:
+                # no tiles in this scene
+                continue
 
+            ds_scene["scene_id"] = scene_id
+            datasets.append(ds_scene)
+
+        import ipdb
+
+        with ipdb.launch_ipdb_on_exception():
             ds = xr.concat(datasets, dim=concat_dim)
 
-            if "stage" in ds.data_vars:
-                ds = ds.set_coords(["stage", "scene_id"])
-            else:
-                ds = ds.set_coords(["scene_id"])
+        if "stage" in ds.data_vars:
+            ds = ds.set_coords(["stage", "scene_id"])
         else:
-            ds = self.input().open()
-            # if "pretrained_model" in self.embedding_model_args:
-            # datasets = []
-            # da_embs_scene
-            # else:
-            ds["emb"] = self._apply_transform(da_emb=ds.emb)
+            ds = ds.set_coords(["scene_id"])
 
+        ds.to_netcdf(self.output().path)
+
+    @property
+    def name_parts(self):
+        name_parts = [
+            "__all__",
+            self.aux_name,
+            f"tile_{self.tile_reduction_op}",
+            "with",
+        ]
+
+        return name_parts
+
+    def output(self):
+        emb_name = make_embedding_name(
+            kind=self.tiles_kind,
+            model_name=self.embedding_model_name,
+            **dict(self.embedding_model_args),
+        )
+
+        name = ".".join(self.name_parts)
+        fn = f"{name}.nc"
+        p = (
+            Path(self.data_path)
+            / "embeddings"
+            / "with_aux"
+            / self.tiles_kind
+            / emb_name
+            / fn
+        )
+        return utils.XArrayTarget(str(p))
+
+
+@luigi.util.requires(AggregatedDatasetScenesAuxFieldWithEmbeddings)
+class TransformedAggregatedDatasetScenesAuxFieldWithEmbeddings(
+    luigi.Task, _AggregatedTileEmbeddingsTransformMixin
+):
+    """
+    Apply embedding transform to embeddings that have been interpolated onto
+    the grid of an aux variable across entire dataset
+    """
+
+    def run(self):
+        ds = self.input().open()
+        ds["emb"] = self._apply_transform(da_emb=ds.emb)
+        Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
         ds.to_netcdf(self.output().path)
 
     @property
@@ -270,26 +350,30 @@ class AggregatedDatasetScenesAuxFieldWithEmbeddings(
             **dict(self.embedding_transform_args),
         )
 
-    def output(self):
-        emb_name = make_embedding_name(
-            kind=self.tiles_kind,
-            model_path=self.embedding_model_path,
-            **dict(self.embedding_model_args),
-        )
-
-        name_parts = [
+    @property
+    def name_parts(self):
+        return [
             "__all__",
             self.aux_name,
-            "by",
-            emb_name,
             f"tile_{self.tile_reduction_op}",
         ]
 
-        transform_name = self.transform_name
+    def output(self):
+        emb_name = make_embedding_name(
+            kind=self.tiles_kind,
+            model_name=self.embedding_model_name,
+            **dict(self.embedding_model_args),
+        )
 
-        if transform_name is not None:
-            name_parts.append(transform_name)
-
-        name = ".".join(name_parts)
-        p = Path(self.data_path) / "embeddings" / "with_aux"
-        return utils.XArrayTarget(str(p / (name + ".nc")))
+        name = ".".join(self.name_parts)
+        fn = f"{name}.nc"
+        p = (
+            Path(self.data_path)
+            / "embeddings"
+            / "with_aux"
+            / self.tiles_kind
+            / emb_name
+            / f"transformed.with.{self.transform_name}"
+            / fn
+        )
+        return utils.XArrayTarget(str(p))

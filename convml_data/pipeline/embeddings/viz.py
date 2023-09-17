@@ -1,36 +1,45 @@
 from pathlib import Path
 
 import luigi
-from convml_tt.interpretation.plots import isomap2d as isomap2d_plot
+import matplotlib.pyplot as plt
+import matplotlib_aximgcache as mpl_aic
+from convml_tt.interpretation.plots import manifold2d as manifold2d_plot
 
-from .sampling import AggregatedDatasetScenesTileEmbeddings, make_embedding_name
+from .sampling import (
+    AggregatedDatasetScenesTileEmbeddings,
+    TransformedAggregatedDatasetScenesTileEmbeddings,
+    make_embedding_name,
+)
 
 
 class TripletEmbeddingsManifoldPlot2D(luigi.Task):
     data_path = luigi.Parameter(default=".")
+    dataset_stage = luigi.Parameter()
 
-    tile_size = luigi.OptionalFloatParameter(default=0.05)
-    dl_sampling = luigi.OptionalFloatParameter(default=0.1)
+    plot_kwargs = luigi.DictParameter(default={})
 
-    model_path = luigi.Parameter()
-    transform_method = luigi.Parameter(default="isomap")
+    model_name = luigi.Parameter()
+    transform_method = luigi.Parameter()
+    cache_ax_image = luigi.BoolParameter(default=False)
 
     def requires(self):
         kwargs = dict(
             tiles_kind="triplets",
             data_path=self.data_path,
-            model_path=self.model_path,
+            model_name=self.model_name,
+            model_args=dict(dataset_stage=self.dataset_stage),
         )
 
-        TaskClass = AggregatedDatasetScenesTileEmbeddings
         tasks = {}
-        tasks["triplet_embeddings"] = TaskClass(
+        tasks["triplet_embeddings"] = AggregatedDatasetScenesTileEmbeddings(
             **kwargs,
         )
 
-        tasks["triplet_anchor_embeddings_manifold"] = TaskClass(
+        kwargs["model_args"].update(dict(tile_type="anchor"))
+        tasks[
+            "triplet_anchor_embeddings_manifold"
+        ] = TransformedAggregatedDatasetScenesTileEmbeddings(
             embedding_transform=self.transform_method,
-            model_args=dict(tile_type="anchor"),
             **kwargs,
         )
 
@@ -54,22 +63,45 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
             .sortby("tile_id")
         )
 
-        fig, _, _ = isomap2d_plot.make_manifold_reference_plot(
+        plot_kwargs = dict(self.plot_kwargs)
+        figsize = plot_kwargs.pop("figsize", (8, 8))
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        manifold2d_plot.make_manifold_reference_plot(
+            ax=ax,
             da_embs=da_triplet_embs,
             method=self.transform_method,
             da_embs_manifold=da_anchor_manifold_embs,
-            tile_size=self.tile_size,
-            dl=self.dl_sampling,
+            **plot_kwargs,
         )
-        fig.savefig(self.output().path)
+        fig.set_dpi(300)
+
+        if self.cache_ax_image:
+            fp_aximgcache = Path(self.output()["aximgcache"].path)
+
+            if not fp_aximgcache.exists():
+                mpl_aic.save_ax_to_image(ax=ax, fpath=fp_aximgcache)
+
+        fig.savefig(self.output()["image"].path, bbox_inches="tight")
 
     def output(self):
         emb_name = make_embedding_name(
-            kind="triplets", model_path=self.model_path, transform=self.transform_method
+            kind="triplets", model_name=self.model_name, transform=self.transform_method
         )
 
         name_parts = [emb_name, self.transform_method, "png"]
 
         fn = ".".join(name_parts)
 
-        return luigi.LocalTarget(str(Path(self.data_path) / fn))
+        outputs = dict(image=luigi.LocalTarget(str(Path(self.data_path) / fn)))
+
+        if not self.cache_ax_image:
+            name_parts_aximgcache = list(name_parts)
+            name_parts_aximgcache.insert(3, "aximgcache")
+            fn_aximgcache = ".".join(name_parts_aximgcache)
+            outputs["aximgcache"] = luigi.LocalTarget(
+                str(Path(self.data_path) / fn_aximgcache)
+            )
+
+        return outputs
