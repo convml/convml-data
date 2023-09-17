@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import luigi
+import matplotlib.pyplot as plt
 import matplotlib_aximgcache as mpl_aic
 from convml_tt.interpretation.plots import manifold2d as manifold2d_plot
 
@@ -62,11 +63,17 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
             .sortby("tile_id")
         )
 
-        fig, ax, _ = manifold2d_plot.make_manifold_reference_plot(
+        plot_kwargs = dict(self.plot_kwargs)
+        figsize = plot_kwargs.pop("figsize", (8, 8))
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        manifold2d_plot.make_manifold_reference_plot(
+            ax=ax,
             da_embs=da_triplet_embs,
             method=self.transform_method,
             da_embs_manifold=da_anchor_manifold_embs,
-            **self.plot_kwargs,
+            **plot_kwargs,
         )
         fig.set_dpi(300)
 
@@ -76,7 +83,7 @@ class TripletEmbeddingsManifoldPlot2D(luigi.Task):
             if not fp_aximgcache.exists():
                 mpl_aic.save_ax_to_image(ax=ax, fpath=fp_aximgcache)
 
-        fig.savefig(self.output()["image"].path)
+        fig.savefig(self.output()["image"].path, bbox_inches="tight")
 
     def output(self):
         emb_name = make_embedding_name(
