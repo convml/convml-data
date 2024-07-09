@@ -2,6 +2,7 @@ from pathlib import Path
 
 import joblib
 import luigi
+import luigi.util
 import xarray as xr
 from convml_tt.data.dataset import ImageSingletDataset
 from convml_tt.data.transforms import get_transforms as get_model_transforms
@@ -17,21 +18,19 @@ from ..triplets import TripletSceneSplits
 from ..utils import SceneBulkProcessingBaseTask
 from .defaults import PREDICTION_BATCH_SIZE
 from .rect.sampling import SceneSlidingWindowImageEmbeddings  # noqa
-from .sampling_base import make_embedding_name
+from .sampling_base import _EmbeddingModelMixin, make_embedding_name
 
 
-class _SceneTileEmbeddingsBase(luigi.Task):
+class _SceneTileEmbeddingsBase(luigi.Task, _EmbeddingModelMixin):
     data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
 
-    model_path = luigi.Parameter()
     prediction_batch_size = luigi.IntParameter(default=PREDICTION_BATCH_SIZE)
 
     def requires(self):
-        fp_model = Path(self.model_path)
-        fp_model_expected = Path(self.data_path) / "embedding_models"
-        if not fp_model.parent.absolute() != fp_model_expected.absolute():
-            raise Exception(f"embedding models should be stored in {fp_model_expected}")
+        fp_model = self.model_path
+        if not fp_model.exists():
+            raise Exception(f"Couldn't find model in path `{fp_model}`")
 
         return SceneTilesData(
             data_path=self.data_path,
@@ -73,7 +72,7 @@ class _SceneTileEmbeddingsBase(luigi.Task):
         raise NotImplementedError
 
     def output(self):
-        emb_name = make_embedding_name(model_path=self.model_path, kind=self.tiles_kind)
+        emb_name = make_embedding_name(model_name=self.model_name, kind=self.tiles_kind)
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
         fn_out = f"{self.scene_id}.nc"
 
@@ -87,7 +86,7 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
 
     tile_type = luigi.Parameter()
     tiles_kind = "triplets"
-    dataset_stage = luigi.OptionalStrParameter(default="train")
+    dataset_stage = luigi.Parameter()
 
     def _get_tile_dataset(self, model_transforms):
         first_tile = next(iter(self.input().values()))
@@ -100,11 +99,19 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
         scene_tile_locations = (
             self.requires().requires()["tile_locations"].output().open()
         )
+        # remove all but the requested tile type
+        scene_tile_locations = [
+            stl for stl in scene_tile_locations if stl["tile_type"] == self.tile_type
+        ]
         scene_tile_ids = [
             f"{stl['triplet_id']:05d}_{stl['tile_type']}"
             for stl in scene_tile_locations
             if stl["triplet_collection"] == self.dataset_stage
         ]
+
+        if len(scene_tile_ids) == 0:
+            # can return anything with length zero
+            return []
 
         tile_type = self.tile_type
 
@@ -128,7 +135,9 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
 
     def output(self):
         emb_name = make_embedding_name(
-            model_path=self.model_path, kind=self.tiles_kind, stage=self.dataset_stage
+            model_name=self.model_name,
+            kind=self.tiles_kind,
+            dataset_stage=self.dataset_stage,
         )
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
         fn_out = f"{self.scene_id}.{self.tile_type}.nc"
@@ -136,12 +145,11 @@ class SceneTripletTileEmbeddings(_SceneTileEmbeddingsBase):
         return XArrayTarget(str(path / fn_out))
 
 
-class SceneTileEmbeddings(luigi.Task):
+class SceneTileEmbeddings(luigi.Task, _EmbeddingModelMixin):
     data_path = luigi.Parameter()
     scene_id = luigi.Parameter()
     tiles_kind = luigi.Parameter()
 
-    model_path = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
     @property
@@ -149,11 +157,6 @@ class SceneTileEmbeddings(luigi.Task):
         return DataSource.load(path=self.data_path)
 
     def requires(self):
-        fp_model = Path(self.model_path)
-        fp_model_expected = Path(self.data_path) / "embedding_models"
-        if not fp_model.parent.absolute() != fp_model_expected.absolute():
-            raise Exception(f"embedding models should be stored in {fp_model_expected}")
-
         if self.tiles_kind == "rect-slidingwindow":
             sampling_meta = self.datasource.sampling
             sampling_sw = sampling_meta.get("rect-slidingwindow")
@@ -167,7 +170,7 @@ class SceneTileEmbeddings(luigi.Task):
             return SceneSlidingWindowImageEmbeddings(
                 data_path=self.data_path,
                 scene_id=self.scene_id,
-                model_path=self.model_path,
+                model_name=self.model_name,
                 N_tile=N_tile,
                 **dict(self.model_args),
             )
@@ -183,7 +186,7 @@ class SceneTileEmbeddings(luigi.Task):
                 tasks[tile_type] = SceneTripletTileEmbeddings(
                     data_path=self.data_path,
                     scene_id=self.scene_id,
-                    model_path=self.model_path,
+                    model_name=self.model_name,
                     tile_type=tile_type,
                     **model_args,
                 )
@@ -193,6 +196,11 @@ class SceneTileEmbeddings(luigi.Task):
 
     def run(self):
         if self.tiles_kind == "triplets":
+            # only requested one tile type, already produced the output file in
+            # the parent task
+            if len(self.input()) == 1 and self.output().exists():
+                return
+
             datasets = []
             for tile_type, inp in self.input().items():
                 da_embs_tiletype = inp.open()
@@ -209,6 +217,7 @@ class SceneTileEmbeddings(luigi.Task):
                 da = xr.concat(datasets, dim="triplet_tile_id")
             else:
                 da = xr.DataArray(name="emb")
+
             da.to_netcdf(self.output().path)
 
     def output(self):
@@ -226,7 +235,9 @@ class SceneTileEmbeddings(luigi.Task):
                     return self.input()[tile_type]
 
             emb_name = make_embedding_name(
-                model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
+                model_name=self.model_name,
+                kind=self.tiles_kind,
+                **dict(model_args),
             )
             path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
             fn_out = f"{self.scene_id}.nc"
@@ -244,13 +255,13 @@ class DatasetScenesTileEmbeddings(SceneBulkProcessingBaseTask):
     tiles_kind = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
 
-    model_path = luigi.Parameter()
+    model_name = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
     def _get_task_class_kwargs(self, scene_ids):
         return dict(
             tiles_kind=self.tiles_kind,
-            model_path=self.model_path,
+            model_name=self.model_name,
             model_args=self.model_args,
         )
 
@@ -272,7 +283,7 @@ def make_transform_name(transform, **transform_args):
         return transform_args["pretrained_model"].replace("/", "__")
 
     if transform is None:
-        return None
+        raise Exception("Provided transform can't be None")
 
     skip_transform_args = []
     name_parts = [
@@ -290,20 +301,16 @@ def make_transform_name(transform, **transform_args):
 
 
 class _AggregatedTileEmbeddingsTransformMixin:
-    embedding_transform = luigi.Parameter(default=None)
+    embedding_transform = luigi.OptionalStrParameter()
     embedding_transform_args = luigi.DictParameter(default={})
 
     def _apply_transform(self, da_emb):
         transform_model_args = dict(self.embedding_transform_args)
 
         if "pretrained_model" in transform_model_args:
-            fp_pretrained_model = (
-                Path(self.data_path)
-                / "embeddings"
-                / "models"
-                / "{}.joblib".format(transform_model_args.pop("pretrained_model"))
+            transform_model_args["pretrained_model"] = joblib.load(
+                self.transform_model_filepath
             )
-            transform_model_args["pretrained_model"] = joblib.load(fp_pretrained_model)
 
         da_emb, transform_model = apply_transform(
             da=da_emb,
@@ -313,35 +320,39 @@ class _AggregatedTileEmbeddingsTransformMixin:
             **transform_model_args,
         )
 
-        if self.transform_model_path is not None:
-            joblib.dump(transform_model, self.transform_model_path)
+        if "pretrained_model" not in self.embedding_transform_args:
+            joblib.dump(transform_model, self.transform_model_filepath)
 
         return da_emb
 
     @property
-    def transform_model_path(self):
+    def transform_model_filepath(self):
+        fn = f"{self.transform_model_name}.joblib"
+        fp_transform_model = Path(self.data_path) / "embeddings" / "models" / fn
+        return fp_transform_model
+
+    @property
+    def transform_model_name(self):
         transform_model_args = dict(self.embedding_transform_args)
 
-        if "pretrained_model" not in transform_model_args:
+        if "pretrained_model" in transform_model_args:
+            return transform_model_args["pretrained_model"]
+        else:
             if self.__class__.__module__ == "convml_data.pipeline.embeddings.sampling":
-                embedding_model_path = self.model_path
+                embedding_model_name = self.model_name
                 embedding_model_args = self.model_args
             else:
-                embedding_model_path = self.embedding_model_path
+                embedding_model_name = Path(self.embedding_model_path).name
                 embedding_model_args = self.embedding_model_args
 
-            emb_model_name = make_embedding_name(
+            emb_name = make_embedding_name(
                 kind=self.tiles_kind,
-                model_path=embedding_model_path,
+                model_name=embedding_model_name,
                 **embedding_model_args,
             )
 
-            fn = f"{emb_model_name}.{self.transform_name}.joblib"
-            fp_transform_model = Path(embedding_model_path).parent / fn
-        else:
-            fp_transform_model = None
-
-        return fp_transform_model
+            transform_model_name = f"{self.transform_name}.of.{emb_name}"
+            return transform_model_name
 
     @property
     def transform_name(self):
@@ -352,7 +363,7 @@ class _AggregatedTileEmbeddingsTransformMixin:
 
 
 class AggregatedDatasetScenesTileEmbeddings(
-    SceneBulkProcessingBaseTask, _AggregatedTileEmbeddingsTransformMixin
+    luigi.Task,
 ):
     """
     Combine into a single file all embeddings for all tiles across all scenes in dataset
@@ -361,46 +372,39 @@ class AggregatedDatasetScenesTileEmbeddings(
     tiles_kind = luigi.Parameter()
     data_path = luigi.Parameter(default=".")
 
-    model_path = luigi.Parameter()
+    model_name = luigi.Parameter()
     model_args = luigi.DictParameter(default={})
 
     def requires(self):
         kwargs = dict(
             tiles_kind=self.tiles_kind,
             data_path=self.data_path,
-            model_path=self.model_path,
+            model_name=self.model_name,
             model_args=self.model_args,
         )
 
-        if self.embedding_transform is None:
-            return DatasetScenesTileEmbeddings(**kwargs)
-        else:
-            return self.__class__(**kwargs)
+        return DatasetScenesTileEmbeddings(**kwargs)
 
     def run(self):
-        if self.embedding_transform is None:
-            datasets = []
-            if self.tiles_kind == "rect-slidingwindow":
-                concat_dim = "scene_id"
-            elif self.tiles_kind == "triplets":
-                # not all scenes contain the same number of triplets so we need
-                # to stack by something else otherwise we'll get nan-values
-                concat_dim = "triplet_tile_id"
-            else:
-                raise NotImplementedError(self.tiles_kind)
-
-            datasets = []
-            for scene_id, inp in self.input().items():
-                da_scene = inp.open()
-                if da_scene.count() == 0:
-                    continue
-
-                da_scene["scene_id"] = scene_id
-                datasets.append(da_scene)
-            da_all_scenes = xr.concat(datasets, dim=concat_dim)
+        datasets = []
+        if self.tiles_kind == "rect-slidingwindow":
+            concat_dim = "scene_id"
+        elif self.tiles_kind == "triplets":
+            # not all scenes contain the same number of triplets so we need
+            # to stack by something else otherwise we'll get nan-values
+            concat_dim = "triplet_tile_id"
         else:
-            da_all_scenes = self.input().open()
-            da_all_scenes = self._apply_transform(da_emb=da_all_scenes)
+            raise NotImplementedError(self.tiles_kind)
+
+        datasets = []
+        for scene_id, inp in self.input().items():
+            da_scene = inp.open()
+            if da_scene.count() == 0:
+                continue
+
+            da_scene["scene_id"] = scene_id
+            datasets.append(da_scene)
+        da_all_scenes = xr.concat(datasets, dim=concat_dim)
 
         Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
         da_all_scenes.to_netcdf(self.output().path)
@@ -418,13 +422,48 @@ class AggregatedDatasetScenesTileEmbeddings(
                 name_parts.append(tile_type)
 
         emb_name = make_embedding_name(
-            model_path=self.model_path, kind=self.tiles_kind, **dict(model_args)
+            model_name=self.model_name, kind=self.tiles_kind, **dict(model_args)
         )
         path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
 
-        transform_name = self.transform_name
-        if transform_name is not None:
-            name_parts.append(transform_name)
+        fn_out = f"{'.'.join(name_parts)}.nc"
+
+        return XArrayTarget(str(path / fn_out))
+
+
+@luigi.util.requires(AggregatedDatasetScenesTileEmbeddings)
+class TransformedAggregatedDatasetScenesTileEmbeddings(
+    luigi.Task,
+    _AggregatedTileEmbeddingsTransformMixin,
+):
+    """
+    Apply transform across all embeddings from all scenes in dataset
+    """
+
+    def run(self):
+        da_all_scenes = self.input().open()
+        da_all_scenes = self._apply_transform(da_emb=da_all_scenes)
+        da_all_scenes.to_netcdf(self.output().path)
+
+    def output(self):
+        model_args = dict(self.model_args)
+
+        name_parts = ["__all__"]
+
+        if self.tiles_kind == "triplets":
+            # remove the tile_type so that it doesn't become part of the
+            # directory name
+            tile_type = model_args.pop("tile_type", "all")
+            if tile_type != "all":
+                name_parts.append(tile_type)
+
+        emb_name = make_embedding_name(
+            model_name=self.model_name, kind=self.tiles_kind, **dict(model_args)
+        )
+        path = Path(self.data_path) / "embeddings" / self.tiles_kind / emb_name
+
+        if self.transform_name is not None:
+            name_parts.append(self.transform_name)
 
         fn_out = f"{'.'.join(name_parts)}.nc"
 

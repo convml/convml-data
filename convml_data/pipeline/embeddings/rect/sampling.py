@@ -16,7 +16,7 @@ from ....utils.luigi import XArrayTarget
 from ... import SceneBulkProcessingBaseTask, SceneRegriddedData
 from ...rect.tiles import TILE_IDENTIFIER_FORMAT, DatasetScenesSlidingWindowImageTiles
 from ..defaults import PREDICTION_BATCH_SIZE
-from ..sampling_base import make_embedding_name
+from ..sampling_base import _EmbeddingModelMixin, make_embedding_name
 
 
 class SlidingWindowImageEmbeddings(luigi.Task):
@@ -115,9 +115,11 @@ class SlidingWindowImageEmbeddings(luigi.Task):
                     dict(tile_id_copy="scene_tile_id", global_tile_id="tile_id")
                 )
 
-        da_pred.attrs["model_path"] = self.model_path
-        da_pred.attrs["image_path"] = self.image_path
-        da_pred.attrs["src_data_path"] = self.src_data_path
+        # need to convert paths to strings (rather than Path objects) for
+        # netcdf serialisation
+        da_pred.attrs["model_path"] = str(self.model_path)
+        da_pred.attrs["image_path"] = str(self.image_path)
+        da_pred.attrs["src_data_path"] = str(self.src_data_path)
 
         da_pred.name = "emb"
 
@@ -134,7 +136,9 @@ class SlidingWindowImageEmbeddings(luigi.Task):
         return XArrayTarget(str(image_path / fn_out))
 
 
-class SceneSlidingWindowImageEmbeddings(SlidingWindowImageEmbeddings):
+class SceneSlidingWindowImageEmbeddings(
+    _EmbeddingModelMixin, SlidingWindowImageEmbeddings
+):
     """
     Create sliding-window tiling embeddings using a specific trained model for
     a specific scene of the dataset in `data_path`
@@ -158,10 +162,12 @@ class SceneSlidingWindowImageEmbeddings(SlidingWindowImageEmbeddings):
         fn = "{}.nc".format(self.scene_id)
         emb_name = make_embedding_name(
             kind="rect-slidingwindow",
-            model_path=self.model_path,
+            model_name=self.model_name,
             step_size=self.step_size,
         )
-        p_out = Path(self.data_path) / "embeddings" / "rect" / emb_name / fn
+        p_out = (
+            Path(self.data_path) / "embeddings" / "rect-slidingwindow" / emb_name / fn
+        )
         return XArrayTarget(str(p_out))
 
 

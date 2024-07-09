@@ -75,14 +75,16 @@ def create_scenes_from_input_queries(inputs, source_name, product):
 
         for input_part in input_parts:
             files_by_time = input_part.open()
-            if not isinstance(files_by_time, dict):
+            if files_by_time is None:
+                pass
+            elif not isinstance(files_by_time, dict):
                 raise Exception(
                     f"The query-result database for `{product}` is in the old format"
-                    " (without the timestamp for each file). Please delete `{input_part.path}`"
+                    f" (without the timestamp for each file). Please delete `{input_part.path}`"
                     " and rerun this task."
                 )
-
-            input_part_files_by_time.update(files_by_time)
+            else:
+                input_part_files_by_time.update(files_by_time)
 
         all_files_by_part_and_time[input_name] = input_part_files_by_time
 

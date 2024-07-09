@@ -8,7 +8,7 @@ URL_FORMAT = (
     "CER_GEO_Ed4_{platform_id}_{version}_%Y.{day_of_year:03d}.%H%M.06K.nc"
 )
 
-MISSING_TIMES = dict(goes16n=["201812181630"])
+MISSING_TIMES = dict(goes16n=["201812181630", "201912171430"])
 
 
 TIME_FORMAT = "%Y%m%d%H%M"

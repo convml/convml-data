@@ -54,14 +54,14 @@ def build_query_tasks(
                 else:
                     raise NotImplementedError(input_name)
 
-                t = GOES16Query(
+                task = GOES16Query(
                     data_path=source_data_path,
                     time=t_center,
                     dt_max=dt_total / 2.0,
                     channel=channel_number,
                     product=product,
                 )
-                tasks.setdefault(input_name, []).append(t)
+                tasks.setdefault(input_name, []).append(task)
 
     elif source_name == "LES":
         kind, *variables = product_name.split("__")
@@ -121,12 +121,13 @@ def build_query_tasks(
         tasks = {}
         for t_start, t_end in time_intervals:
             for data_type in required_inputs:
-                tasks[data_type] = QueryTaskClass(
+                task = QueryTaskClass(
                     data_path=source_data_path,
                     t_start=t_start,
                     t_end=t_end,
                     data_type=data_type,
                 )
+                tasks.setdefault(data_type, []).append(task)
 
     else:
         raise NotImplementedError(source_name)
@@ -179,6 +180,13 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
         FetchTask = era5.pipeline.ERA5Fetch
     else:
         raise NotImplementedError(source_name)
+
+    if not isinstance(scene_source_files, dict):
+        raise Exception(
+            "Please delete `scene_ids.yaml` and generate again, the stored scene"
+            " IDs don't contain a key for the scene components (i.e. they are in"
+            " the old format)"
+        )
 
     tasks = {
         input_name: FetchTask(filename=input_filename, **kwargs)
@@ -271,16 +279,23 @@ def _extract_goes16_variable(product, task_input, domain=None, product_meta={}):
         bbox_crop = [bbox_lons.min(), bbox_lons.max(), bbox_lats.min(), bbox_lats.max()]
 
     if product == "truecolor_rgb":
-        if not set(task_input.keys()) == {1, 2, 3}:
+        try:
+            input_keys = [int(v) for v in task_input.keys()]
+        except Exception:
+            input_keys = list(task_input.keys())
+        if not set(input_keys) == {1, 2, 3}:
             raise Exception(
                 "To create TrueColor RGB images for GOES-16 the first"
                 " three Radiance channels (1, 2, 3) are needed"
             )
 
         scene_fns = [inp.path for inp in task_input.values()]
+
         da = goes16.satpy_rgb.load_rgb_files_and_get_composite_da(
             scene_fns=scene_fns, bbox_crop=bbox_crop
         )
+        # need to set a dimension, we'll just say RGB is dimensionless for now
+        da.attrs["units"] = "1"
     else:
         try:
             channel_number, channel_prefix = goes16.parse_channel_shorthand(
@@ -347,7 +362,9 @@ def get_required_extra_fields(data_source, product):
     return None
 
 
-def extract_variable(task_input, data_source, product, product_meta={}, domain=None):
+def extract_variable(
+    task_input, data_source, product, timestamp, product_meta={}, domain=None
+):
     do_crop = domain is not None
 
     if product == "user_function":
@@ -386,9 +403,10 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
     elif data_source == "ceres_syn1deg_modis":
         var_name = product
         # CERES files have all products stored in a single file and so for all
-        # products there is just a single input
+        # products there is just a single input. There are multiple times in a
+        # single file though so we have to pass in the timestamp
         da = ceres_syn1deg_modis.extract_variable(
-            task_input=task_input[product], var_name=var_name
+            task_input=task_input[product], var_name=var_name, timestamp=timestamp
         )
     elif data_source == "goes16":
         do_crop = False
@@ -416,6 +434,9 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
             raise NotImplementedError(product)
     else:
         raise NotImplementedError(data_source)
+
+    assert "units" in da.attrs
+    assert "long_name" in da.attrs
 
     if do_crop:
         da_cropped = rc.crop_field_to_domain(domain=domain, da=da)

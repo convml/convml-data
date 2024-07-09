@@ -111,6 +111,9 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
                 apply_crop=False,
             )
 
+            assert "units" in da_domain.attrs
+            assert "long_name" in da_domain.attrs
+
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
             domain_output["data"].write(da_domain)
         else:
