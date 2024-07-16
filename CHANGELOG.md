@@ -17,6 +17,11 @@
   `PIL`.
   [\#22](https://github.com/convml/convml-data/pull/22)
 
+- Change filename-format for GOES-16 query results yaml-file so that these can
+  be written/read on windows (previously the filename-format contained `:`
+  which isn't supported on windows filesystems)
+  [\#43](https://github.com/convml/convml-data/pull/43)
+
 
 *internal*
 
