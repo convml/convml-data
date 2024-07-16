@@ -1,13 +1,11 @@
 import datetime
-import itertools
 import logging
-from functools import partial
 from pathlib import Path
 
 import luigi
 
 from .. import DataSource
-from ..sources import build_query_tasks, get_time_for_filename
+from ..sources import build_query_tasks
 from ..utils.luigi import DBTarget
 
 log = logging.getLogger()
@@ -30,34 +28,30 @@ def parse_scene_id(s):
     return source, datetime.datetime.strptime(t_str, SCENE_ID_DATE_FORMAT)
 
 
-def merge_multiinput_sources(files_per_input, time_fn):
-    input_files_by_timestamp = {}
-    N_inputs = len(files_per_input)
-    for input_name, input_files in files_per_input.items():
-        for input_filename in input_files:
-            file_timestamp = time_fn(filename=input_filename)
-            time_group = input_files_by_timestamp.setdefault(file_timestamp, {})
+def merge_multiinput_sources(all_files_by_part_and_time):
+    input_files_grouped_by_timestamp = {}
+    N_inputs = len(all_files_by_part_and_time)
+
+    for input_name, input_parts in all_files_by_part_and_time.items():
+        for file_timestamp, input_filename in input_parts.items():
+            time_group = input_files_grouped_by_timestamp.setdefault(file_timestamp, {})
             time_group[input_name] = input_filename
 
-    scene_filesets = []
+    all_timestamps = sorted(list(input_files_grouped_by_timestamp.keys()))
 
-    for timestamp in sorted(input_files_by_timestamp.keys()):
-        timestamp_files = input_files_by_timestamp[timestamp]
+    for timestamp in all_timestamps:
+        timestamp_files = input_files_grouped_by_timestamp[timestamp]
 
         if len(timestamp_files) == N_inputs:
-            scene_filesets.append(
-                {
-                    input_name: timestamp_files[input_name]
-                    for input_name in files_per_input.keys()
-                }
-            )
+            pass
         else:
             log.warn(
                 f"Only {len(timestamp_files)} were found for timestamp {timestamp}"
                 " so this timestamp will be excluded"
             )
+            del input_files_grouped_by_timestamp[timestamp]
 
-    return scene_filesets
+    return input_files_grouped_by_timestamp
 
 
 def create_scenes_from_input_queries(inputs, source_name, product):
@@ -68,32 +62,35 @@ def create_scenes_from_input_queries(inputs, source_name, product):
     timestamp for each scene (returned as as a dictionary of times, with each
     entry being a dictionary of the input-name -> filename for that scene)
     """
-    scenes_by_time = {}
-
-    opened_inputs = {}
+    all_files_by_part_and_time = {}
     for input_name, input_parts in inputs.items():
         # some queries return a list of DBTargets each containing a number of
         # filenames matching the queries, some only return a single DBTarget,
         # so we make into a list here to handle the general case
+
+        input_part_files_by_time = {}
+
         if not isinstance(input_parts, list):
             input_parts = [input_parts]
 
-        opened_inputs[input_name] = list(
-            itertools.chain(*[input_part.open() for input_part in input_parts])
-        )
+        for input_part in input_parts:
+            files_by_time = input_part.open()
+            if not isinstance(files_by_time, dict):
+                raise Exception(
+                    f"The query-result database for `{product}` is in the old format"
+                    " (without the timestamp for each file). Please delete `{input_part.path}`"
+                    " and rerun this task."
+                )
 
-    time_fn = partial(get_time_for_filename, source_name=source_name)
+            input_part_files_by_time.update(files_by_time)
 
-    scene_sets = merge_multiinput_sources(opened_inputs, time_fn=time_fn)
+        all_files_by_part_and_time[input_name] = input_part_files_by_time
 
-    # use the first input to work out what time to use for the whole combined
-    # product for the scene
-    input_name_timing = list(inputs.keys())[0]
-    for scene_filenames in scene_sets:
-        t_scene = time_fn(filename=scene_filenames[input_name_timing])
-        scenes_by_time[t_scene] = scene_filenames
+    scene_files_by_time = merge_multiinput_sources(
+        all_files_by_part_and_time=all_files_by_part_and_time
+    )
 
-    return scenes_by_time
+    return scene_files_by_time
 
 
 class GenerateSceneIDs(luigi.Task):
@@ -126,14 +123,17 @@ class GenerateSceneIDs(luigi.Task):
         data_source = self.data_source
 
         input = self.input()
-        if type(input) == dict:
+        if type(input) is dict:
             # multi-channel queries, each channel is represented by a key in the
             # dictionary
-            scenes_by_time = create_scenes_from_input_queries(
-                inputs=self.input(),
-                source_name=self.data_source.source,
-                product=self.data_source.product,
-            )
+            import ipdb
+
+            with ipdb.launch_ipdb_on_exception():
+                scenes_by_time = create_scenes_from_input_queries(
+                    inputs=self.input(),
+                    source_name=self.data_source.source,
+                    product=self.data_source.product,
+                )
         else:
             raise NotImplementedError(input)
 

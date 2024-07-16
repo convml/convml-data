@@ -76,7 +76,7 @@ class TripletSceneSplits(luigi.Task):
 
         triplets_meta = ds.sampling["triplets"]
         N_triplets = triplets_meta["N_triplets"]
-        if type(N_triplets) == int:
+        if type(N_triplets) is int:
             N_triplets = dict(train=N_triplets)
         scene_collections_splitting = triplets_meta["scene_collections_splitting"]
 

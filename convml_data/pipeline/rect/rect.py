@@ -54,7 +54,7 @@ class FieldReprojected(luigi.Task):
         bbox_domain = find_bbox(da_grid=da_grid, deg_pad=deg_pad)
 
         if any([self.var_name.startswith(rad_var) for rad_var in rad_vars]):
-            TaskClass = sources.ceres.CeresFieldCropped
+            TaskClass = sources.ceres_geo.CeresFieldCropped
         else:
             TaskClass = sources.era5.ERA5FieldCropped
 

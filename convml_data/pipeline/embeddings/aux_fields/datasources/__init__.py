@@ -1,7 +1,7 @@
 import luigi
 
 from .. import utils
-from . import ceres, convml_tt_aux, era5, radar
+from . import ceres, convml_tt_aux, era5
 
 
 class FieldCropped(luigi.WrapperTask):
