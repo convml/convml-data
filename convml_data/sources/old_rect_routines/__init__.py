@@ -1,7 +1,12 @@
 import luigi
 
 from .. import utils
-from . import ceres, convml_tt_aux, era5
+from . import ceres, convml_tt_aux
+
+try:
+    from . import era5
+except ImportError:
+    era5 = None
 
 
 class FieldCropped(luigi.WrapperTask):
