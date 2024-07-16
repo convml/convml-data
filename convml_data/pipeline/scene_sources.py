@@ -123,7 +123,7 @@ class GenerateSceneIDs(luigi.Task):
         data_source = self.data_source
 
         input = self.input()
-        if type(input) == dict:
+        if type(input) is dict:
             # multi-channel queries, each channel is represented by a key in the
             # dictionary
             import ipdb

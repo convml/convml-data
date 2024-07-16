@@ -19,7 +19,7 @@ from .utils.time import find_nearest_time, npdt64_to_dt
 
 
 def _parse_datetime(o):
-    if not type(o) == datetime.datetime:
+    if not isinstance(o, datetime.datetime):
         return dateutil.parser.parse(o)
     else:
         return o
@@ -132,7 +132,7 @@ class DataSource:
             N_triplets = triplets_meta.get("N_triplets", {})
 
             # the default triplets collection is called "train"
-            if type(N_triplets) == int:
+            if type(N_triplets) is int:
                 triplets_meta["N_triplets"] = dict(train=N_triplets)
 
             assert "train" in triplets_meta["N_triplets"]

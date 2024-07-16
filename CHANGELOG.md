@@ -2,7 +2,7 @@
 
 ## [Unreleased](https://github.com/convml/convml-data/tree/HEADER)
 
-[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.1...)
+[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.1...HEAD)
 
 *enhancements*
 
@@ -23,12 +23,11 @@
 - Simplify the code for applying time-filters to ease adding new filters in
   future [\#22](https://github.com/convml/convml-data/pull/22)
 
-## [Unreleased](https://github.com/convml/convml-data/tree/HEAD)
-
-[Full Changelog](https://github.com/convml/convml-data/compare/v0.2.1...HEAD)
-
-
 *maintenance*
+
+- fixes for pre-commit linting tools (incompatability changes with flake8 and
+  isort with newer versions of python and importlib)
+  [\#42](https://github.com/convml/convml-data/pull/42)
 
 - Update `black` version to fix issue which arose with upstream dependency and
   switch to `conda-incubator/setup-miniconda` for CI conda (since
