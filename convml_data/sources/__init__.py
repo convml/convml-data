@@ -3,7 +3,7 @@ from pathlib import Path
 import regridcart as rc
 import xarray as xr
 
-from . import ceres, goes16, user_functions
+from . import ceres_geo, ceres_syn1deg_modis, goes16, user_functions
 from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .images import rgb_image_from_scene_data as create_image  # noqa
 from .les import FindLESFiles, LESDataFile
@@ -82,10 +82,14 @@ def build_query_tasks(
             source_variable=source_variable,
             filename_glob=filename_glob,
         )
-    elif source_name in ["ceres", "era5"]:
-        if source_name == "ceres":
+    elif source_name in ["ceres_geo", "era5", "ceres_syn1deg_modis"]:
+        if source_name == "ceres_geo":
             # CERES has everything in a single-file, so there's just one "data_type"
-            QueryTaskClass = ceres.pipeline.QueryForData
+            QueryTaskClass = ceres_geo.pipeline.QueryForData
+            required_inputs = [product_name]
+        elif source_name == "ceres_syn1deg_modis":
+            # CERES has everything in a single-file, so there's just one "data_type"
+            QueryTaskClass = ceres_syn1deg_modis.pipeline.QueryForData
             required_inputs = [product_name]
         elif source_name == "era5":
             if era5 is None:
@@ -174,9 +178,12 @@ def build_fetch_tasks(scene_source_files, source_name, source_data_path):
     elif source_name == "LES":
         # assume that these files already exist
         FetchTask = LESDataFile
-    elif source_name == "ceres":
+    elif source_name == "ceres_geo":
         kwargs["data_path"] = Path(source_data_path) / "raw"
-        FetchTask = ceres.pipeline.FetchFile
+        FetchTask = ceres_geo.pipeline.FetchFile
+    elif source_name == "ceres_syn1deg_modis":
+        kwargs["data_path"] = Path(source_data_path) / "raw"
+        FetchTask = ceres_syn1deg_modis.pipeline.FetchSyn1DegFile
     elif source_name == "era5":
         kwargs["data_path"] = Path(source_data_path) / "raw"
         FetchTask = era5.pipeline.ERA5Fetch
@@ -214,22 +221,6 @@ def get_user_function_source_input_names(source_name, product_meta):
             raise NotImplementedError(input_names)
 
     return input_names
-
-
-def get_time_for_filename(source_name, filename):
-    """Return the timestamp for a given source data file"""
-    if source_name == "goes16":
-        t = GOES16Query.get_time(filename=filename)
-    elif source_name == "LES":
-        t = FindLESFiles.get_time(filename=filename)
-    elif source_name == "ceres":
-        t = ceres.pipeline.QueryForData.get_time(filename=filename)
-    elif source_name == "era5":
-        t = era5.pipeline.ERA5Query.get_time(filename=filename)
-    else:
-        raise NotImplementedError(source_name)
-
-    return t
 
 
 def _extract_scene_data_for_user_function(task_input, product_meta, bbox_crop):
@@ -395,11 +386,20 @@ def extract_variable(task_input, data_source, product, product_meta={}, domain=N
             )
         do_crop = False
 
-    elif data_source == "ceres":
+    elif data_source == "ceres_geo":
         _, var_name = product.split("__")
         # CERES files have all products stored in a single file and so for all
         # products there is just a single input
-        da = ceres.extract_variable(task_input=task_input[product], var_name=var_name)
+        da = ceres_geo.extract_variable(
+            task_input=task_input[product], var_name=var_name
+        )
+    elif data_source == "ceres_syn1deg_modis":
+        var_name = product
+        # CERES files have all products stored in a single file and so for all
+        # products there is just a single input
+        da = ceres_syn1deg_modis.extract_variable(
+            task_input=task_input[product], var_name=var_name
+        )
     elif data_source == "goes16":
         do_crop = False
         da = _extract_goes16_variable(
