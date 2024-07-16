@@ -60,7 +60,7 @@ class GOES16Query(luigi.Task):
         fn = filename_format.format(
             channel=self.channel,
             product=self.product,
-            time=self.time.isoformat(),
+            time=self.time.isoformat().replace(":", "").replace("-", ""),
             duration=isodate.duration_isoformat(self.dt_max),
         )
         p = Path(self.data_path) / fn
