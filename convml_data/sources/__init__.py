@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import numpy as np
 import regridcart as rc
 import xarray as xr
 
@@ -8,6 +7,7 @@ from . import ceres, goes16, user_functions
 from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .images import rgb_image_from_scene_data as create_image  # noqa
 from .les import FindLESFiles, LESDataFile
+
 try:
     from . import era5
 except ImportError:
