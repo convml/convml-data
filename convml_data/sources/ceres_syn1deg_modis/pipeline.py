@@ -13,28 +13,16 @@ class QueryForData(luigi.Task):
     data_type = luigi.OptionalParameter(default=None)
     data_path = luigi.Parameter()
 
-    DB_NAME_FORMAT = "{data_type}_keys_{t_start:%Y%m%d%H%M}_{t_end:%Y%m%d%H%M}"
+    DB_NAME_FORMAT = "keys_{t_start:%Y%m%d%H%M}_{t_end:%Y%m%d%H%M}"
 
     def run(self):
-        try:
-            satellite, _ = self.data_type.split("__")
-        except ValueError as ex:
-            raise Exception(
-                f"Couldn't parse data-type `{self.data_type}`, please make sure"
-                " it has the format `{satellite}__{product_name}`"
-            ) from ex
-        filenames = list(
-            get_available_files(
-                t_start=self.t_start, t_end=self.t_end, satellite=satellite
-            )
-        )
+        filenames = dict(get_available_files(t_start=self.t_start, t_end=self.t_end))
 
         Path(self.output().fn).parent.mkdir(exist_ok=True, parents=True)
         self.output().write(filenames)
 
     def output(self):
         db_name = self.DB_NAME_FORMAT.format(
-            data_type=self.data_type,
             t_start=self.t_start,
             t_end=self.t_end,
         )
@@ -45,23 +33,13 @@ class QueryForData(luigi.Task):
         return parse_filename(fn=filename)["time"]
 
 
-class FetchFile(luigi.Task):
+class FetchSyn1DegFile(luigi.Task):
     data_path = luigi.Parameter()
     filename = luigi.Parameter()
 
     def run(self):
         file_info = parse_filename(fn=self.filename)
-        time = file_info["time"]
-        satellite = file_info["satellite"]
-        if satellite == "goes16n":
-            platform_id = "GOE16_NH"
-        elif satellite == "meteosat9n":
-            platform_id = "MET09_NH"
-        else:
-            raise NotImplementedError(satellite)
-
-        version = "V01.2"
-        url = make_url(platform_id=platform_id, version=version, time=time)
+        url = make_url(**file_info)
         Path(self.output().path).parent.mkdir(exist_ok=True, parents=True)
         download_file(url, self.output().path)
 

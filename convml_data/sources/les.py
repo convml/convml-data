@@ -62,8 +62,8 @@ class FindLESFiles(luigi.Task):
         return DataSource.load(path=Path(self.data_path) / ".." / "..")
 
     def run(self):
-        filenames = []
-        times = []
+        files_by_timestep = {}
+
         for inp in self.input():
             ds_or_da = inp.open()
             file_path = inp.fn
@@ -99,15 +99,17 @@ class FindLESFiles(luigi.Task):
                     p_new = p_file_root / "scenes" / filename
                     p_new.parent.mkdir(exist_ok=True, parents=True)
                     da_timestep.to_netcdf(p_new)
-                    filenames.append(str(p_new))
+                    files_by_timestep[t_str] = p_new
                     timestep_counter += 1
             else:
-                filenames.append(filename)
+                dt = _dt64_to_datetime(dt64=times[0])
+                t_str = dt.isoformat().replace(":", "")
+                files_by_timestep[t_str] = filename
 
-        if len(filenames) == 0:
+        if len(files_by_timestep) == 0:
             raise Exception("No scenes found")
 
-        self.output().write(filenames)
+        self.output().write(files_by_timestep)
 
     def output(self):
         return DBTarget(

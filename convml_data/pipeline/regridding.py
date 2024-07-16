@@ -103,7 +103,12 @@ class SceneRegriddedData(_SceneRectSampleBase, SceneImageMixin, AuxTaskMixin):
                 method = "nearest_s2d"
 
             da_domain = rc.resample(
-                domain=domain, da=da_src, dx=dx, method=method, keep_attrs=True
+                domain=domain,
+                da=da_src,
+                dx=dx,
+                method=method,
+                keep_attrs=True,
+                apply_crop=False,
             )
 
             Path(domain_output["data"].fn).parent.mkdir(exist_ok=True, parents=True)
