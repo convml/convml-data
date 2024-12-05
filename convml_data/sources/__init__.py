@@ -3,10 +3,15 @@ from pathlib import Path
 import regridcart as rc
 import xarray as xr
 
-from . import ceres_geo, ceres_syn1deg_modis, era5, goes16, user_functions
+from . import ceres_geo, ceres_syn1deg_modis, goes16, user_functions
 from .goes16.pipeline import GOES16Fetch, GOES16Query
 from .images import rgb_image_from_scene_data as create_image  # noqa
 from .les import FindLESFiles, LESDataFile
+
+try:
+    from . import era5
+except ImportError:
+    era5 = None
 
 
 def build_query_tasks(
@@ -87,6 +92,12 @@ def build_query_tasks(
             QueryTaskClass = ceres_syn1deg_modis.pipeline.QueryForData
             required_inputs = [product_name]
         elif source_name == "era5":
+            if era5 is None:
+                raise ImportError(
+                    "ERA5 is not available without eurec4a-environment installed. "
+                    "Please install eurec4a-environment package from "
+                    "https://github.com/eurec4a/eurec4a-environment"
+                )
             # For ERA5 we might make derived variables using multiple files, so
             # the query might be made up of multiple of input files for a
             # single scene
